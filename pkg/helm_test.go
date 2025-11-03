@@ -4,13 +4,13 @@ import (
 	"context"
 	"testing"
 
-	"github.com/k8s-manifest-kit/engine/pkg/filter/meta/gvk"
-	"github.com/k8s-manifest-kit/engine/pkg/transformer/meta/labels"
-	"github.com/k8s-manifest-kit/engine/pkg/types"
 	"github.com/rs/xid"
 
 	appsv1 "k8s.io/api/apps/v1"
 
+	"github.com/k8s-manifest-kit/engine/pkg/filter/meta/gvk"
+	"github.com/k8s-manifest-kit/engine/pkg/transformer/meta/labels"
+	"github.com/k8s-manifest-kit/engine/pkg/types"
 	helm "github.com/k8s-manifest-kit/renderer-helm/pkg"
 
 	. "github.com/onsi/gomega"

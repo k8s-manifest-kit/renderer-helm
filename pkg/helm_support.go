@@ -7,8 +7,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/k8s-manifest-kit/engine/pkg/types"
-	"github.com/k8s-manifest-kit/pkg/util/k8s"
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chart/loader"
@@ -16,6 +14,9 @@ import (
 	"helm.sh/helm/v3/pkg/registry"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+
+	"github.com/k8s-manifest-kit/engine/pkg/types"
+	"github.com/k8s-manifest-kit/pkg/util/k8s"
 )
 
 const (
