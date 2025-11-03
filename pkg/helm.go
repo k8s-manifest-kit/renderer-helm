@@ -14,6 +14,7 @@ import (
 	"github.com/k8s-manifest-kit/engine/pkg/pipeline"
 	"github.com/k8s-manifest-kit/engine/pkg/types"
 	"github.com/k8s-manifest-kit/pkg/util"
+	"github.com/k8s-manifest-kit/pkg/util/cache"
 )
 
 const rendererType = "helm"
@@ -56,6 +57,7 @@ type Renderer struct {
 	inputs     []*sourceHolder
 	helmEngine engine.Engine
 	opts       RendererOptions
+	cache      cache.Interface[[]unstructured.Unstructured]
 }
 
 // New creates a new Helm Renderer with the given inputs and options.
@@ -68,11 +70,6 @@ func New(inputs []Source, opts ...RendererOption) (*Renderer, error) {
 	// Apply options
 	for _, opt := range opts {
 		opt.ApplyTo(&rendererOpts)
-	}
-
-	// Set default cache key function if not provided
-	if rendererOpts.CacheKeyFunc == nil {
-		rendererOpts.CacheKeyFunc = DefaultCacheKey()
 	}
 
 	settings := rendererOpts.Settings
@@ -99,7 +96,8 @@ func New(inputs []Source, opts ...RendererOption) (*Renderer, error) {
 			LintMode: rendererOpts.LintMode,
 			Strict:   rendererOpts.Strict,
 		},
-		opts: rendererOpts,
+		opts:  rendererOpts,
+		cache: newCache(rendererOpts.CacheOptions),
 	}
 
 	return r, nil
@@ -246,21 +244,19 @@ func (r *Renderer) processSingle(
 		)
 	}
 
-	var cacheKey string
+	spec := ChartSpec{
+		Chart:          holder.Chart,
+		ReleaseName:    holder.ReleaseName,
+		ReleaseVersion: holder.ReleaseVersion,
+		Values:         renderValues,
+	}
 
 	// Check cache (if enabled)
-	if r.opts.Cache != nil {
-		cacheKey = r.opts.CacheKeyFunc(ChartSpec{
-			Chart:          holder.Chart,
-			ReleaseName:    holder.ReleaseName,
-			ReleaseVersion: holder.ReleaseVersion,
-			Values:         renderValues,
-		})
-
+	if r.cache != nil {
 		// ensure objects are evicted
-		r.opts.Cache.Sync()
+		r.cache.Sync()
 
-		if cached, found := r.opts.Cache.Get(cacheKey); found {
+		if cached, found := r.cache.Get(spec); found {
 			return cached, nil
 		}
 	}
@@ -288,8 +284,8 @@ func (r *Renderer) processSingle(
 	result = append(result, templateObjects...)
 
 	// Cache result (if enabled)
-	if r.opts.Cache != nil {
-		r.opts.Cache.Set(cacheKey, result)
+	if r.cache != nil {
+		r.cache.Set(spec, result)
 	}
 
 	return result, nil

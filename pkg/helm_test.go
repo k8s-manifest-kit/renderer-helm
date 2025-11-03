@@ -11,6 +11,7 @@ import (
 	"github.com/k8s-manifest-kit/engine/pkg/filter/meta/gvk"
 	"github.com/k8s-manifest-kit/engine/pkg/transformer/meta/labels"
 	"github.com/k8s-manifest-kit/engine/pkg/types"
+	"github.com/k8s-manifest-kit/pkg/util/cache"
 	helm "github.com/k8s-manifest-kit/renderer-helm/pkg"
 
 	. "github.com/onsi/gomega"
@@ -582,7 +583,15 @@ func TestCacheIntegration(t *testing.T) {
 	t.Run("should use custom cache key function", func(t *testing.T) {
 		g := NewWithT(t)
 
-		// Use FastCacheKey which ignores values
+		// Use custom KeyFunc that ignores values (like old FastCacheKey)
+		fastKeyFunc := func(key any) string {
+			if spec, ok := key.(helm.ChartSpec); ok {
+				return spec.Chart + ":" + spec.ReleaseName + ":" + spec.ReleaseVersion
+			}
+
+			return ""
+		}
+
 		renderer, err := helm.New([]helm.Source{
 			{
 				Chart:       testChartPath,
@@ -592,8 +601,7 @@ func TestCacheIntegration(t *testing.T) {
 				}),
 			},
 		},
-			helm.WithCache(),
-			helm.WithCacheKeyFunc(helm.FastCacheKey()),
+			helm.WithCache(cache.WithKeyFunc(fastKeyFunc)),
 		)
 		g.Expect(err).ToNot(HaveOccurred())
 

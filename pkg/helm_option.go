@@ -3,8 +3,6 @@ package helm
 import (
 	"helm.sh/helm/v3/pkg/cli"
 
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-
 	"github.com/k8s-manifest-kit/engine/pkg/types"
 	"github.com/k8s-manifest-kit/pkg/util"
 	"github.com/k8s-manifest-kit/pkg/util/cache"
@@ -25,8 +23,8 @@ type RendererOptions struct {
 	// Nil means use default settings.
 	Settings *cli.EnvSettings
 
-	// Cache is a custom cache implementation for render results.
-	Cache cache.Interface[[]unstructured.Unstructured]
+	// CacheOptions holds cache configuration. nil = caching disabled.
+	CacheOptions *cache.Options
 
 	// SourceAnnotations enables automatic addition of source tracking annotations.
 	SourceAnnotations bool
@@ -38,10 +36,6 @@ type RendererOptions struct {
 	// Strict enables strict template rendering mode.
 	// When enabled, template rendering will fail if a template references a value that was not passed in.
 	Strict bool
-
-	// CacheKeyFunc customizes how cache keys are generated from chart specifications.
-	// If nil, DefaultCacheKey is used.
-	CacheKeyFunc CacheKeyFunc
 }
 
 // ApplyTo applies the renderer options to the target configuration.
@@ -53,17 +47,16 @@ func (opts RendererOptions) ApplyTo(target *RendererOptions) {
 		target.Settings = opts.Settings
 	}
 
-	if opts.Cache != nil {
-		target.Cache = opts.Cache
+	if opts.CacheOptions != nil {
+		if target.CacheOptions == nil {
+			target.CacheOptions = &cache.Options{}
+		}
+		opts.CacheOptions.ApplyTo(target.CacheOptions)
 	}
 
 	target.SourceAnnotations = opts.SourceAnnotations
 	target.LintMode = opts.LintMode
 	target.Strict = opts.Strict
-
-	if opts.CacheKeyFunc != nil {
-		target.CacheKeyFunc = opts.CacheKeyFunc
-	}
 }
 
 // WithFilter adds a renderer-specific filter to this Helm renderer's processing chain.
@@ -94,9 +87,20 @@ func WithSettings(settings *cli.EnvSettings) RendererOption {
 // WithCache enables render result caching with the specified options.
 // If no options are provided, uses default TTL of 5 minutes.
 // By default, caching is NOT enabled.
+//
+// Example:
+//
+//	helm.WithCache(cache.WithTTL(10*time.Minute))
+//	helm.WithCache(cache.WithTTL(5*time.Minute), cache.WithKeyFunc(myKeyFunc))
 func WithCache(opts ...cache.Option) RendererOption {
 	return util.FunctionalOption[RendererOptions](func(rendererOpts *RendererOptions) {
-		rendererOpts.Cache = cache.NewRenderCache(opts...)
+		if rendererOpts.CacheOptions == nil {
+			rendererOpts.CacheOptions = &cache.Options{}
+		}
+
+		for _, opt := range opts {
+			opt.ApplyTo(rendererOpts.CacheOptions)
+		}
 	})
 }
 
@@ -127,17 +131,5 @@ func WithLintMode(enabled bool) RendererOption {
 func WithStrict(enabled bool) RendererOption {
 	return util.FunctionalOption[RendererOptions](func(opts *RendererOptions) {
 		opts.Strict = enabled
-	})
-}
-
-// WithCacheKeyFunc sets a custom cache key generation function.
-// Built-in options: DefaultCacheKey (default), FastCacheKey, ChartOnlyCacheKey.
-//
-// Example:
-//
-//	helm.WithCacheKeyFunc(helm.FastCacheKey)
-func WithCacheKeyFunc(fn CacheKeyFunc) RendererOption {
-	return util.FunctionalOption[RendererOptions](func(opts *RendererOptions) {
-		opts.CacheKeyFunc = fn
 	})
 }
