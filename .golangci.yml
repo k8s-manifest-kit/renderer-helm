@@ -1,0 +1,83 @@
+version: "2"
+linters:
+  default: all
+  disable:
+    - wsl
+    - wsl_v5
+    - varnamelen
+    - exhaustruct
+    - funlen
+    - ireturn
+    - depguard
+    - paralleltest
+    - noinlineerr
+    - whitespace  # Extra empty lines acceptable for readability
+  exclusions:
+    rules:
+      # Test files (includes benchmarks since they're in *_test.go files)
+      - path: '.*_test\.go$'
+        linters:
+          - err113
+          - forcetypeassert  # Type assertion panics are acceptable in tests
+          - mnd
+          - maintidx  # Large test functions with many cases are acceptable
+          - nestif  # Some nesting acceptable in test helpers
+          - dupl  # Similar test patterns are acceptable
+      # Examples directory
+      - path: 'examples/.*'
+        linters:
+          - mnd  # Magic numbers are acceptable in examples for clarity
+  settings:
+    cyclop:
+      max-complexity: 15  # Increased from default 10
+    gocognit:
+      min-complexity: 50  # Increased from default 30
+    revive:
+      enable-all-rules: true
+      rules:
+        # Disable noisy rules that don't add value
+        - name: package-comments
+          disabled: true  # Package comments not critical for examples/main packages
+        - name: dot-imports
+          disabled: true  # Common practice for Gomega test assertions
+        - name: var-naming
+          disabled: true  # "types" and "util" are reasonable package names
+        - name: line-length-limit
+          disabled: true  # 80 character limit is too restrictive for modern code
+        - name: function-length
+          disabled: true  # 75 line limit too restrictive for test functions
+        - name: cognitive-complexity
+          disabled: true  # Complexity metrics are subjective
+        - name: add-constant
+          disabled: true  # Magic number detection is too noisy
+        - name: unchecked-type-assertion
+          disabled: true  # Type assertions in tests are usually safe
+        - name: cyclomatic
+          disabled: true  # Cyclomatic complexity is similar to cognitive complexity
+        - name: package-directory-mismatch
+          disabled: true  # main_test pattern is intentional for example tests
+        - name: unused-receiver
+          disabled: true  # Interface methods often don't need the receiver
+        - name: empty-lines
+          disabled: true  # Extra empty lines in test functions are acceptable
+
+formatters:
+  enable:
+    - gci
+    - gofmt
+    - goimports
+  settings:
+    gci:
+      sections:
+        - standard
+        - default
+        - blank
+        - prefix(k8s.io)
+        - blank
+        - prefix(github.com/k8s-manifest-kit/)
+        - blank
+        - dot
+      custom-order: true
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
