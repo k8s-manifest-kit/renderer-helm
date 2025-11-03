@@ -1,0 +1,7 @@
+apiVersion: v2
+name: simple-app
+description: A minimal Helm chart for testing
+type: application
+version: 1.0.0
+appVersion: "1.0"
+
