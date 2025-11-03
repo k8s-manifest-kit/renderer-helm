@@ -160,8 +160,6 @@ github.com/json-iterator/go v1.1.12 h1:PV8peI4a0ysnczrg+LtxykD8LfKY9ML6u2jnxaEnr
 github.com/json-iterator/go v1.1.12/go.mod h1:e30LSqwooZae/UwlEbR2852Gd8hjQvJoHmT4TnhNGBo=
 github.com/k8s-manifest-kit/engine v0.0.0-20251102210517-1f00c62c5137 h1:3quLCNVgzv/5eF/3M89bh7laJAtmgNCEESlsEhdfxgk=
 github.com/k8s-manifest-kit/engine v0.0.0-20251102210517-1f00c62c5137/go.mod h1:X6EBvi0fD/ziL9Y7LLXjYZKxUk+gPwi17YTqJEp3A9g=
-github.com/k8s-manifest-kit/pkg v0.0.0-20251102194245-01587c2f97da h1:q5o67t5xieKwhWkpMDvxeLumGh4FVSg3BmljCfVgyj0=
-github.com/k8s-manifest-kit/pkg v0.0.0-20251102194245-01587c2f97da/go.mod h1:qQKbAP3RuWJBY8BqrHnXJHlMR4tc2v+nPQjsu2J0agU=
 github.com/k8s-manifest-kit/pkg v0.0.0-20251103163058-683e9e0554ec h1:BP6/Y4wyUAHJ6y83PIHJ4ee8uCBE7AvUCi1czcfWcLw=
 github.com/k8s-manifest-kit/pkg v0.0.0-20251103163058-683e9e0554ec/go.mod h1:qQKbAP3RuWJBY8BqrHnXJHlMR4tc2v+nPQjsu2J0agU=
 github.com/kisielk/errcheck v1.5.0/go.mod h1:pFxgyoBC7bSaBwPgfKdkLd5X25qrDl4LWUI2bnpBCr8=
