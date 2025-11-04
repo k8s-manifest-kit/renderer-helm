@@ -158,10 +158,10 @@ github.com/josharian/intern v1.0.0 h1:vlS4z54oSdjm0bgjRigI+G1HpF+tI+9rE5LLzOg8Hm
 github.com/josharian/intern v1.0.0/go.mod h1:5DoeVV0s6jJacbCEi61lwdGj/aVlrQvzHFFd8Hwg//Y=
 github.com/json-iterator/go v1.1.12 h1:PV8peI4a0ysnczrg+LtxykD8LfKY9ML6u2jnxaEnrnM=
 github.com/json-iterator/go v1.1.12/go.mod h1:e30LSqwooZae/UwlEbR2852Gd8hjQvJoHmT4TnhNGBo=
-github.com/k8s-manifest-kit/engine v0.0.0-20251102210517-1f00c62c5137 h1:3quLCNVgzv/5eF/3M89bh7laJAtmgNCEESlsEhdfxgk=
-github.com/k8s-manifest-kit/engine v0.0.0-20251102210517-1f00c62c5137/go.mod h1:X6EBvi0fD/ziL9Y7LLXjYZKxUk+gPwi17YTqJEp3A9g=
-github.com/k8s-manifest-kit/pkg v0.0.0-20251103163058-683e9e0554ec h1:BP6/Y4wyUAHJ6y83PIHJ4ee8uCBE7AvUCi1czcfWcLw=
-github.com/k8s-manifest-kit/pkg v0.0.0-20251103163058-683e9e0554ec/go.mod h1:qQKbAP3RuWJBY8BqrHnXJHlMR4tc2v+nPQjsu2J0agU=
+github.com/k8s-manifest-kit/engine v0.1.0 h1:7pLYomlau135bO3AME3hWhCufWvlJDzmPThhvipzfg8=
+github.com/k8s-manifest-kit/engine v0.1.0/go.mod h1:4mxBoLvlm4NGb1HL6pxY/aKg5PxABDdXhG0Y8/NbRTo=
+github.com/k8s-manifest-kit/pkg v0.1.0 h1:jVKYbnzEXwKgmHw/oOyWqdc/PaWQY/UwQgiy/eBm66g=
+github.com/k8s-manifest-kit/pkg v0.1.0/go.mod h1:qQKbAP3RuWJBY8BqrHnXJHlMR4tc2v+nPQjsu2J0agU=
 github.com/kisielk/errcheck v1.5.0/go.mod h1:pFxgyoBC7bSaBwPgfKdkLd5X25qrDl4LWUI2bnpBCr8=
 github.com/kisielk/gotool v1.0.0/go.mod h1:XhKaO+MFFWcvkIS/tQcRk01m1F5IRFswLeQ+oQHNcck=
 github.com/klauspost/compress v1.18.0 h1:c/Cqfb0r+Yi+JtIEq73FWXVkRonBlf0CRNYc8Zttxdo=
