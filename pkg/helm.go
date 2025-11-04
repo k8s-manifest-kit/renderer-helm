@@ -19,6 +19,15 @@ import (
 
 const rendererType = "helm"
 
+// Credentials holds authentication credentials for accessing Helm repositories and registries.
+type Credentials struct {
+	// Username for basic authentication
+	Username string
+
+	// Password for basic authentication
+	Password string
+}
+
 // Source defines a Helm chart source for rendering.
 type Source struct {
 	// Repo is the repository URL for chart lookup. Optional for local or OCI charts.
@@ -39,6 +48,11 @@ type Source struct {
 	// Function is called during rendering to obtain dynamic values.
 	// Merged with chart defaults via chartutil.ToRenderValues.
 	Values func(context.Context) (map[string]any, error)
+
+	// Credentials provides authentication credentials for accessing the chart.
+	// Function is called during chart loading to obtain credentials dynamically.
+	// Optional; only needed for authenticated registries/repositories.
+	Credentials func(context.Context) (*Credentials, error)
 
 	// ProcessDependencies determines whether chart dependencies should be processed.
 	// If true, chartutil.ProcessDependencies will be called during rendering.

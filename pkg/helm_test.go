@@ -818,3 +818,113 @@ func TestSourceAnnotations(t *testing.T) {
 		}
 	})
 }
+
+func TestCredentials(t *testing.T) {
+
+	t.Run("should work with nil credentials", func(t *testing.T) {
+		g := NewWithT(t)
+		renderer, err := helm.New([]helm.Source{
+			{
+				Chart:       testChartPath,
+				ReleaseName: "no-creds-test",
+				Credentials: nil,
+			},
+		})
+		g.Expect(err).ToNot(HaveOccurred())
+
+		objects, err := renderer.Process(t.Context(), nil)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(objects).To(HaveLen(3))
+	})
+
+	t.Run("should work with static credentials", func(t *testing.T) {
+		g := NewWithT(t)
+		renderer, err := helm.New([]helm.Source{
+			{
+				Chart:       testChartPath,
+				ReleaseName: "static-creds-test",
+				Credentials: helm.StaticCredentials("testuser", "testpass"),
+			},
+		})
+		g.Expect(err).ToNot(HaveOccurred())
+
+		objects, err := renderer.Process(t.Context(), nil)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(objects).To(HaveLen(3))
+	})
+
+	t.Run("should work with dynamic credentials", func(t *testing.T) {
+		g := NewWithT(t)
+		callCount := 0
+		dynamicCreds := func(_ context.Context) (*helm.Credentials, error) {
+			callCount++
+
+			return &helm.Credentials{
+				Username: "dynamic-user",
+				Password: "dynamic-pass",
+			}, nil
+		}
+
+		renderer, err := helm.New([]helm.Source{
+			{
+				Chart:       testChartPath,
+				ReleaseName: "dynamic-creds-test",
+				Credentials: dynamicCreds,
+			},
+		})
+		g.Expect(err).ToNot(HaveOccurred())
+
+		objects, err := renderer.Process(t.Context(), nil)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(objects).To(HaveLen(3))
+
+		// Credentials function should be called during chart loading
+		g.Expect(callCount).To(Equal(1))
+
+		// Second render should not call credentials again (chart already loaded)
+		objects, err = renderer.Process(t.Context(), nil)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(objects).To(HaveLen(3))
+		g.Expect(callCount).To(Equal(1))
+	})
+
+	t.Run("should handle credentials function returning empty credentials", func(t *testing.T) {
+		g := NewWithT(t)
+		emptyCreds := func(_ context.Context) (*helm.Credentials, error) {
+			return &helm.Credentials{}, nil
+		}
+
+		renderer, err := helm.New([]helm.Source{
+			{
+				Chart:       testChartPath,
+				ReleaseName: "empty-creds-test",
+				Credentials: emptyCreds,
+			},
+		})
+		g.Expect(err).ToNot(HaveOccurred())
+
+		objects, err := renderer.Process(t.Context(), nil)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(objects).To(HaveLen(3))
+	})
+
+	t.Run("should propagate credentials function errors", func(t *testing.T) {
+		g := NewWithT(t)
+		errorCreds := func(_ context.Context) (*helm.Credentials, error) {
+			return nil, context.DeadlineExceeded
+		}
+
+		renderer, err := helm.New([]helm.Source{
+			{
+				Chart:       testChartPath,
+				ReleaseName: "error-creds-test",
+				Credentials: errorCreds,
+			},
+		})
+		g.Expect(err).ToNot(HaveOccurred())
+
+		_, err = renderer.Process(t.Context(), nil)
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(err.Error()).To(ContainSubstring("failed to get credentials"))
+	})
+}

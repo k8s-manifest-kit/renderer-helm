@@ -44,6 +44,17 @@ func Values(values map[string]any) func(context.Context) (map[string]any, error)
 	}
 }
 
+// StaticCredentials returns a Credentials function that always returns the provided credentials.
+// This is a convenience helper for the common case of static authentication.
+func StaticCredentials(username string, password string) func(context.Context) (*Credentials, error) {
+	return func(_ context.Context) (*Credentials, error) {
+		return &Credentials{
+			Username: username,
+			Password: password,
+		}, nil
+	}
+}
+
 // sourceHolder wraps a Source with internal state for lazy loading and thread-safety.
 type sourceHolder struct {
 	Source
@@ -92,7 +103,7 @@ func (h *sourceHolder) LoadChart(ctx context.Context, settings *cli.EnvSettings)
 		return nil, fmt.Errorf("context cancelled during chart load: %w", err)
 	}
 
-	opt, err := createChartPathOptions(&h.Source)
+	opt, err := createChartPathOptions(ctx, &h.Source)
 	if err != nil {
 		return nil, err
 	}
@@ -127,7 +138,7 @@ func (h *sourceHolder) LoadChart(ctx context.Context, settings *cli.EnvSettings)
 // createChartPathOptions creates ChartPathOptions for a Source.
 // Creates a fresh registry client and install instance per call.
 // This allows each Source to have different credential/authentication requirements.
-func createChartPathOptions(source *Source) (action.ChartPathOptions, error) {
+func createChartPathOptions(ctx context.Context, source *Source) (action.ChartPathOptions, error) {
 	c, err := registry.NewClient()
 	if err != nil {
 		return action.ChartPathOptions{}, fmt.Errorf("unable to create registry client: %w", err)
@@ -140,6 +151,19 @@ func createChartPathOptions(source *Source) (action.ChartPathOptions, error) {
 	opt := install.ChartPathOptions
 	opt.RepoURL = source.Repo
 	opt.Version = source.ReleaseVersion
+
+	// Apply credentials if provided
+	if source.Credentials != nil {
+		creds, err := source.Credentials(ctx)
+		if err != nil {
+			return action.ChartPathOptions{}, fmt.Errorf("failed to get credentials: %w", err)
+		}
+
+		if creds != nil {
+			opt.Username = creds.Username
+			opt.Password = creds.Password
+		}
+	}
 
 	return opt, nil
 }
