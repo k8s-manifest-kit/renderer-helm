@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"sync"
 
@@ -23,6 +24,10 @@ const (
 	// maxReleaseNameLength is the maximum allowed length for a Helm release name.
 	// This limit is imposed by Kubernetes label value constraints.
 	maxReleaseNameLength = 53
+
+	// releaseNamePattern defines the valid format for Helm release names.
+	// Must start and end with lowercase alphanumeric, hyphens allowed in the middle.
+	releaseNamePattern = `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
 )
 
 var (
@@ -34,6 +39,15 @@ var (
 
 	// ErrReleaseNameTooLong is returned when a release name exceeds the maximum length.
 	ErrReleaseNameTooLong = errors.New("release name exceeds maximum length")
+
+	// ErrReleaseNameInvalidFormat is returned when a release name contains invalid characters or format.
+	ErrReleaseNameInvalidFormat = errors.New(
+		"release name must consist of lowercase alphanumeric characters or '-', " +
+			"and must start and end with an alphanumeric character",
+	)
+
+	// releaseNameRegex is the compiled regex for validating release names.
+	releaseNameRegex = regexp.MustCompile(releaseNamePattern)
 )
 
 // Values returns a Values function that always returns the provided static values.
@@ -82,6 +96,13 @@ func (h *sourceHolder) Validate() error {
 			ErrReleaseNameTooLong,
 			maxReleaseNameLength,
 			len(releaseName),
+		)
+	}
+	if !releaseNameRegex.MatchString(releaseName) {
+		return fmt.Errorf(
+			"%w (got %q)",
+			ErrReleaseNameInvalidFormat,
+			releaseName,
 		)
 	}
 

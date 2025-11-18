@@ -372,12 +372,100 @@ func TestNew(t *testing.T) {
 		g.Expect(renderer).To(BeNil())
 	})
 
+	t.Run("should reject input with uppercase letters in ReleaseName", func(t *testing.T) {
+		g := NewWithT(t)
+		renderer, err := helm.New([]helm.Source{
+			{
+				Chart:       "oci://registry-1.docker.io/daprio/dapr-shared-chart",
+				ReleaseName: "MyApp",
+			},
+		})
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(err.Error()).To(ContainSubstring("must consist of lowercase alphanumeric characters"))
+		g.Expect(renderer).To(BeNil())
+	})
+
+	t.Run("should reject input with underscores in ReleaseName", func(t *testing.T) {
+		g := NewWithT(t)
+		renderer, err := helm.New([]helm.Source{
+			{
+				Chart:       "oci://registry-1.docker.io/daprio/dapr-shared-chart",
+				ReleaseName: "my_app",
+			},
+		})
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(err.Error()).To(ContainSubstring("must consist of lowercase alphanumeric characters"))
+		g.Expect(renderer).To(BeNil())
+	})
+
+	t.Run("should reject input with ReleaseName starting with hyphen", func(t *testing.T) {
+		g := NewWithT(t)
+		renderer, err := helm.New([]helm.Source{
+			{
+				Chart:       "oci://registry-1.docker.io/daprio/dapr-shared-chart",
+				ReleaseName: "-myapp",
+			},
+		})
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(err.Error()).To(ContainSubstring("must consist of lowercase alphanumeric characters"))
+		g.Expect(renderer).To(BeNil())
+	})
+
+	t.Run("should reject input with ReleaseName ending with hyphen", func(t *testing.T) {
+		g := NewWithT(t)
+		renderer, err := helm.New([]helm.Source{
+			{
+				Chart:       "oci://registry-1.docker.io/daprio/dapr-shared-chart",
+				ReleaseName: "myapp-",
+			},
+		})
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(err.Error()).To(ContainSubstring("must consist of lowercase alphanumeric characters"))
+		g.Expect(renderer).To(BeNil())
+	})
+
 	t.Run("should accept valid input", func(t *testing.T) {
 		g := NewWithT(t)
 		renderer, err := helm.New([]helm.Source{
 			{
 				Chart:       "oci://registry-1.docker.io/daprio/dapr-shared-chart",
 				ReleaseName: "test",
+			},
+		})
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(renderer).ToNot(BeNil())
+	})
+
+	t.Run("should accept ReleaseName with hyphens", func(t *testing.T) {
+		g := NewWithT(t)
+		renderer, err := helm.New([]helm.Source{
+			{
+				Chart:       "oci://registry-1.docker.io/daprio/dapr-shared-chart",
+				ReleaseName: "my-app",
+			},
+		})
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(renderer).ToNot(BeNil())
+	})
+
+	t.Run("should accept ReleaseName with numbers", func(t *testing.T) {
+		g := NewWithT(t)
+		renderer, err := helm.New([]helm.Source{
+			{
+				Chart:       "oci://registry-1.docker.io/daprio/dapr-shared-chart",
+				ReleaseName: "my-app-123",
+			},
+		})
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(renderer).ToNot(BeNil())
+	})
+
+	t.Run("should accept single character ReleaseName", func(t *testing.T) {
+		g := NewWithT(t)
+		renderer, err := helm.New([]helm.Source{
+			{
+				Chart:       "oci://registry-1.docker.io/daprio/dapr-shared-chart",
+				ReleaseName: "a",
 			},
 		})
 		g.Expect(err).ToNot(HaveOccurred())
