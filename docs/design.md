@@ -32,6 +32,92 @@ The Helm renderer provides native integration with Helm charts, enabling program
    - `NewEngine()` function for simple single-chart scenarios
    - Wraps renderer creation with engine setup
 
+## Library Design Principles
+
+This library follows specific design principles to remain a composable, unopinionated building block for applications.
+
+### No Logging by Design
+
+This library intentionally does **not** include any logging functionality. This is a deliberate architectural decision based on library design best practices:
+
+- **Libraries should not impose logging frameworks** on consuming applications
+- **Log output pollutes application logs** with library-specific formatting and levels
+- **The consuming application should control all logging decisions**, including when, where, and how to log
+- **Avoids dependency coupling** to specific logging libraries (logrus, zap, slog, etc.)
+
+**Instead of logging, this library provides:**
+- Rich error context through Go's error wrapping (`fmt.Errorf` with `%w`)
+- Clear, descriptive error messages that chain context from lower layers
+- Full stack traces through wrapped errors
+- Applications can inspect errors and log at their discretion
+
+### Observability at the Right Layer
+
+Metrics and observability concerns are **intentionally delegated to appropriate layers**:
+
+**Cache metrics belong in the cache layer:**
+- The renderer accepts `cache.Interface[[]unstructured.Unstructured]` via dependency injection
+- Metrics collection is the responsibility of the cache implementation, not the renderer
+- Follows the **dependency inversion principle**: renderer depends on interface, not implementation
+- Users can bring their own cache with built-in metrics, tracing, or monitoring
+
+**Why this is correct:**
+- **Single Responsibility**: Renderer renders, cache caches, metrics measure
+- **No coupling**: Renderer doesn't depend on metric collection strategies
+- **Flexibility**: Different cache implementations can provide different observability approaches
+- **Testability**: Easy to test with simple in-memory cache or sophisticated monitoring cache
+
+### Unopinionated Library Philosophy
+
+This library is designed to be a **focused, composable building block**:
+
+**What this means:**
+- **Does one thing well**: Renders Helm charts programmatically
+- **No hidden side effects**: No file writes (except through explicit filesystem), no logging, no metrics
+- **Cross-cutting concerns delegated**: Logging, metrics, tracing belong in the application layer
+- **Clean interfaces**: Filesystem, cache, filters, transformers all injectable
+- **Composable**: Works with any cache implementation, filesystem, or pipeline
+
+**Benefits of this approach:**
+- Library remains lightweight and focused
+- No unnecessary dependencies
+- Applications maintain full control over observability
+- Easy to integrate into existing systems with their own observability infrastructure
+- Library can be used in diverse contexts (CLI tools, web services, batch processors)
+
+### What the Library DOES Provide
+
+While avoiding opinions about cross-cutting concerns, the library provides everything needed for robust error handling and flexibility:
+
+1. **Rich Error Context**
+```go
+return fmt.Errorf("failed to render chart %q (release %q): %w", holder.Chart, holder.ReleaseName, err)
+```
+- Errors chain context from lower layers
+- Easy to inspect and handle at application level
+
+2. **Clear Error Messages**
+- Descriptive messages explain what failed and why
+- Context includes paths, values, and operation details
+- Validation errors at creation time prevent runtime surprises
+
+3. **Interface-Based Abstractions**
+- `cache.Interface`: Bring your own cache with metrics/observability
+- `types.Filter` and `types.Transformer`: Inject custom processing
+- `cli.EnvSettings`: Customize Helm environment configuration
+
+4. **Functional Options Pattern**
+- `WithCache()`, `WithSettings()`, `WithFilters()`, etc.
+- Flexible configuration without breaking API compatibility
+- Optional features remain optional
+
+5. **No Global State**
+- All configuration via constructor and options
+- Thread-safe by design
+- Multiple independent renderer instances coexist
+
+This design philosophy ensures the library remains a **professional, maintainable, and composable component** suitable for production systems.
+
 ## Key Design Decisions
 
 ### 1. Chart Source Flexibility
