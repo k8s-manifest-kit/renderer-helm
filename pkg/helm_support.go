@@ -110,19 +110,33 @@ func (h *sourceHolder) Validate() error {
 }
 
 // LoadChart returns the loaded Helm chart, loading it lazily if needed.
-// Thread-safe for concurrent use.
+// Thread-safe for concurrent use with optimized read-path performance.
 func (h *sourceHolder) LoadChart(
 	ctx context.Context,
 	settings *cli.EnvSettings,
 ) (*chart.Chart, error) {
+	// Fast path: read lock for checking if chart is already loaded
+	// Multiple goroutines can check concurrently
+	h.mu.RLock()
+	if h.chart != nil {
+		c := h.chart
+		h.mu.RUnlock()
+
+		return c, nil
+	}
+	h.mu.RUnlock()
+
+	// Slow path: write lock for loading chart
+	// Only one goroutine loads at a time
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
+	// Double-check: another goroutine might have loaded while we waited for lock
 	if h.chart != nil {
 		return h.chart, nil
 	}
 
-	// Check context before starting the load operation
+	// Check context before starting the expensive load operation
 	if err := ctx.Err(); err != nil {
 		return nil, fmt.Errorf("context cancelled during chart load: %w", err)
 	}

@@ -1,6 +1,8 @@
 package helm
 
 import (
+	"fmt"
+
 	"helm.sh/helm/v3/pkg/chartutil"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -14,6 +16,25 @@ type ChartSpec struct {
 	ReleaseName    string
 	ReleaseVersion string
 	Values         chartutil.Values
+}
+
+// FastCacheKeyFunc generates cache keys based only on chart identity, ignoring values.
+// This provides significantly better cache performance but means all renders of the
+// same chart+release+version will share cached results regardless of values.
+//
+// Use this when:
+//   - Values are static and don't change between renders
+//   - You accept that value changes won't trigger re-rendering from cache
+//
+// Usage:
+//
+//	helm.WithCache(cache.WithKeyFunc(helm.FastCacheKeyFunc))
+func FastCacheKeyFunc(key any) string {
+	if spec, ok := key.(ChartSpec); ok {
+		return fmt.Sprintf("%s:%s:%s", spec.Chart, spec.ReleaseName, spec.ReleaseVersion)
+	}
+
+	return ""
 }
 
 // newCache creates a cache instance with Helm-specific default KeyFunc.

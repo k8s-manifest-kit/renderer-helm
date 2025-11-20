@@ -253,12 +253,8 @@ func (r *Renderer) processSingle(
 	// Prepare render values (includes render-time values)
 	renderValues, err := r.processValues(ctx, holder, renderTimeValues)
 	if err != nil {
-		return nil, fmt.Errorf(
-			"failed to prepare render values for chart %q (release %q): %w",
-			holder.Chart,
-			holder.ReleaseName,
-			err,
-		)
+		// processValues already provides full context, pass through
+		return nil, err
 	}
 
 	spec := ChartSpec{
