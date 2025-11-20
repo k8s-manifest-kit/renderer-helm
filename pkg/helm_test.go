@@ -537,6 +537,28 @@ func TestValuesHelper(t *testing.T) {
 		g.Expect(err).ToNot(HaveOccurred())
 		g.Expect(result).To(Equal(map[string]any{}))
 	})
+
+	t.Run("should handle Values function returning nil", func(t *testing.T) {
+		g := NewWithT(t)
+
+		nilValuesFunc := func(_ context.Context) (map[string]any, error) {
+			return nil, nil
+		}
+
+		renderer, err := helm.New([]helm.Source{
+			{
+				Chart:       testChartPath,
+				ReleaseName: "nil-values-test",
+				Values:      nilValuesFunc,
+			},
+		})
+		g.Expect(err).ToNot(HaveOccurred())
+
+		// Should not panic, should use empty map
+		objects, err := renderer.Process(t.Context(), nil)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(objects).To(HaveLen(3))
+	})
 }
 
 func TestCacheIntegration(t *testing.T) {
