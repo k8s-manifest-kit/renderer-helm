@@ -193,7 +193,6 @@ func createChartPathOptions(
 	opt.RepoURL = source.Repo
 	opt.Version = source.ReleaseVersion
 
-	// Apply credentials if provided
 	if source.Credentials != nil {
 		creds, err := source.Credentials(ctx)
 		if err != nil {

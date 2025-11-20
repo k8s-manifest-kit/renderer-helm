@@ -542,7 +542,7 @@ func TestValuesHelper(t *testing.T) {
 		g := NewWithT(t)
 
 		nilValuesFunc := func(_ context.Context) (map[string]any, error) {
-			return nil, nil
+			return nil, nil //nolint:nilnil // Intentionally testing nil return
 		}
 
 		renderer, err := helm.New([]helm.Source{

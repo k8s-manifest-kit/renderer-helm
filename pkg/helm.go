@@ -91,7 +91,6 @@ func New(inputs []Source, opts ...RendererOption) (*Renderer, error) {
 		settings = cli.New()
 	}
 
-	// Wrap sources in holders and validate
 	holders := make([]*sourceHolder, len(inputs))
 	for i := range inputs {
 		holders[i] = &sourceHolder{
@@ -190,7 +189,6 @@ func (r *Renderer) processValues(
 	holder *sourceHolder,
 	renderTimeValues map[string]any,
 ) (chartutil.Values, error) {
-	// Get values dynamically (includes render-time values)
 	values, err := r.values(ctx, holder, renderTimeValues)
 	if err != nil {
 		return nil, fmt.Errorf(
@@ -201,7 +199,6 @@ func (r *Renderer) processValues(
 		)
 	}
 
-	// Process dependencies if enabled
 	if holder.ProcessDependencies {
 		if err := chartutil.ProcessDependencies(holder.chart, values); err != nil {
 			return nil, fmt.Errorf(
@@ -213,7 +210,6 @@ func (r *Renderer) processValues(
 		}
 	}
 
-	// Prepare render values
 	renderValues, err := chartutil.ToRenderValues(
 		holder.chart,
 		values,
@@ -250,7 +246,6 @@ func (r *Renderer) processSingle(
 		return nil, err
 	}
 
-	// Prepare render values (includes render-time values)
 	renderValues, err := r.processValues(ctx, holder, renderTimeValues)
 	if err != nil {
 		// processValues already provides full context, pass through
@@ -279,7 +274,6 @@ func (r *Renderer) processSingle(
 		return nil, fmt.Errorf("context cancelled before render: %w", err)
 	}
 
-	// Render the chart
 	files, err := r.helmEngine.Render(chart, renderValues)
 	if err != nil {
 		return nil, fmt.Errorf("failed to render chart %q (release %q): %w", holder.Chart, holder.ReleaseName, err)
@@ -287,21 +281,20 @@ func (r *Renderer) processSingle(
 
 	result := make([]unstructured.Unstructured, 0)
 
-	// Process CRDs first
+	// Process CRDs before other resources to ensure custom resource definitions
+	// are available if any rendered templates reference custom resources
 	crdObjects, err := r.processCRDs(chart, holder)
 	if err != nil {
 		return nil, err
 	}
 	result = append(result, crdObjects...)
 
-	// Process rendered templates
 	templateObjects, err := r.processRenderedTemplates(files, holder)
 	if err != nil {
 		return nil, err
 	}
 	result = append(result, templateObjects...)
 
-	// Cache result (if enabled)
 	if r.cache != nil {
 		r.cache.Set(spec, result)
 	}
