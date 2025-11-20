@@ -257,7 +257,7 @@ func (r *Renderer) processSingle(
 		return nil, err
 	}
 
-	spec := ChartSpec{
+	spec := chartSpec{
 		Chart:          holder.Chart,
 		ReleaseName:    holder.ReleaseName,
 		ReleaseVersion: holder.ReleaseVersion,

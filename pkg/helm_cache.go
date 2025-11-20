@@ -10,8 +10,8 @@ import (
 	"github.com/k8s-manifest-kit/pkg/util/cache"
 )
 
-// ChartSpec contains the data used to generate cache keys for rendered charts.
-type ChartSpec struct {
+// chartSpec contains the data used to generate cache keys for rendered charts.
+type chartSpec struct {
 	Chart          string
 	ReleaseName    string
 	ReleaseVersion string
@@ -30,7 +30,7 @@ type ChartSpec struct {
 //
 //	helm.WithCache(cache.WithKeyFunc(helm.FastCacheKeyFunc))
 func FastCacheKeyFunc(key any) string {
-	if spec, ok := key.(ChartSpec); ok {
+	if spec, ok := key.(chartSpec); ok {
 		return fmt.Sprintf("%s:%s:%s", spec.Chart, spec.ReleaseName, spec.ReleaseVersion)
 	}
 

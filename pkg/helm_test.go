@@ -671,15 +671,7 @@ func TestCacheIntegration(t *testing.T) {
 	t.Run("should use custom cache key function", func(t *testing.T) {
 		g := NewWithT(t)
 
-		// Use custom KeyFunc that ignores values (like old FastCacheKey)
-		fastKeyFunc := func(key any) string {
-			if spec, ok := key.(helm.ChartSpec); ok {
-				return spec.Chart + ":" + spec.ReleaseName + ":" + spec.ReleaseVersion
-			}
-
-			return ""
-		}
-
+		// Use FastCacheKeyFunc which ignores values for better performance
 		renderer, err := helm.New([]helm.Source{
 			{
 				Chart:       testChartPath,
@@ -689,7 +681,7 @@ func TestCacheIntegration(t *testing.T) {
 				}),
 			},
 		},
-			helm.WithCache(cache.WithKeyFunc(fastKeyFunc)),
+			helm.WithCache(cache.WithKeyFunc(helm.FastCacheKeyFunc)),
 		)
 		g.Expect(err).ToNot(HaveOccurred())
 
@@ -698,8 +690,8 @@ func TestCacheIntegration(t *testing.T) {
 		g.Expect(err).ToNot(HaveOccurred())
 		g.Expect(result1).To(HaveLen(3))
 
-		// Second render with DIFFERENT values but using FastCacheKey
-		// ignores values, so this should be a cache hit
+		// Second render with DIFFERENT values but using FastCacheKeyFunc
+		// which ignores values, so this should be a cache hit
 		result2, err := renderer.Process(t.Context(), map[string]any{
 			"replicaCount": 5,
 		})
