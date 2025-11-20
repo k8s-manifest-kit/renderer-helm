@@ -173,7 +173,10 @@ func (r *Renderer) values(
 				err,
 			)
 		}
-		sourceValues = v
+		// Only use returned values if not nil
+		if v != nil {
+			sourceValues = v
+		}
 	}
 
 	// Deep merge with render-time values taking precedence

@@ -111,7 +111,10 @@ func (h *sourceHolder) Validate() error {
 
 // LoadChart returns the loaded Helm chart, loading it lazily if needed.
 // Thread-safe for concurrent use.
-func (h *sourceHolder) LoadChart(ctx context.Context, settings *cli.EnvSettings) (*chart.Chart, error) {
+func (h *sourceHolder) LoadChart(
+	ctx context.Context,
+	settings *cli.EnvSettings,
+) (*chart.Chart, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -159,7 +162,10 @@ func (h *sourceHolder) LoadChart(ctx context.Context, settings *cli.EnvSettings)
 // createChartPathOptions creates ChartPathOptions for a Source.
 // Creates a fresh registry client and install instance per call.
 // This allows each Source to have different credential/authentication requirements.
-func createChartPathOptions(ctx context.Context, source *Source) (action.ChartPathOptions, error) {
+func createChartPathOptions(
+	ctx context.Context,
+	source *Source,
+) (action.ChartPathOptions, error) {
 	c, err := registry.NewClient()
 	if err != nil {
 		return action.ChartPathOptions{}, fmt.Errorf("unable to create registry client: %w", err)
@@ -191,7 +197,11 @@ func createChartPathOptions(ctx context.Context, source *Source) (action.ChartPa
 
 // addSourceAnnotations adds source tracking annotations to a slice of unstructured objects.
 // Only modifies objects if source annotations are enabled in renderer options.
-func (r *Renderer) addSourceAnnotations(objects []unstructured.Unstructured, chartPath, fileName string) {
+func (r *Renderer) addSourceAnnotations(
+	objects []unstructured.Unstructured,
+	chartPath string,
+	fileName string,
+) {
 	if !r.opts.SourceAnnotations {
 		return
 	}
@@ -212,7 +222,10 @@ func (r *Renderer) addSourceAnnotations(objects []unstructured.Unstructured, cha
 
 // processCRDs extracts and processes CRD objects from a Helm chart.
 // Returns the decoded unstructured objects with source annotations added if enabled.
-func (r *Renderer) processCRDs(helmChart *chart.Chart, holder *sourceHolder) ([]unstructured.Unstructured, error) {
+func (r *Renderer) processCRDs(
+	helmChart *chart.Chart,
+	holder *sourceHolder,
+) ([]unstructured.Unstructured, error) {
 	result := make([]unstructured.Unstructured, 0)
 
 	for _, crd := range helmChart.CRDObjects() {
