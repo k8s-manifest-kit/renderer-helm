@@ -274,6 +274,11 @@ func (r *Renderer) processSingle(
 		}
 	}
 
+	// Check context before expensive render operation
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("context cancelled before render: %w", err)
+	}
+
 	// Render the chart
 	files, err := r.helmEngine.Render(chart, renderValues)
 	if err != nil {
