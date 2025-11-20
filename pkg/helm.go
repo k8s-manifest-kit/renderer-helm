@@ -68,7 +68,7 @@ type Source struct {
 // is protected by per-Source mutexes to ensure thread-safe lazy initialization.
 type Renderer struct {
 	settings   *cli.EnvSettings
-	inputs     []*sourceHolder
+	sources    []*sourceHolder
 	helmEngine engine.Engine
 	opts       RendererOptions
 	cache      cache.Interface[[]unstructured.Unstructured]
@@ -105,7 +105,7 @@ func New(inputs []Source, opts ...RendererOption) (*Renderer, error) {
 
 	r := &Renderer{
 		settings: settings,
-		inputs:   holders,
+		sources:  holders,
 		helmEngine: engine.Engine{
 			LintMode: rendererOpts.LintMode,
 			Strict:   rendererOpts.Strict,
@@ -117,19 +117,19 @@ func New(inputs []Source, opts ...RendererOption) (*Renderer, error) {
 	return r, nil
 }
 
-// Process executes the rendering logic for all configured inputs.
+// Process executes the rendering logic for all configured sources.
 // It implements the types.Renderer interface.
 // This method is safe for concurrent use.
 func (r *Renderer) Process(ctx context.Context, renderTimeValues map[string]any) ([]unstructured.Unstructured, error) {
 	allObjects := make([]unstructured.Unstructured, 0)
 
-	for i := range r.inputs {
-		objects, err := r.processSingle(ctx, r.inputs[i], renderTimeValues)
+	for i := range r.sources {
+		objects, err := r.processSingle(ctx, r.sources[i], renderTimeValues)
 		if err != nil {
 			return nil, fmt.Errorf(
 				"error rendering helm chart %s (release: %s): %w",
-				r.inputs[i].Chart,
-				r.inputs[i].ReleaseName,
+				r.sources[i].Chart,
+				r.sources[i].ReleaseName,
 				err,
 			)
 		}
@@ -139,8 +139,8 @@ func (r *Renderer) Process(ctx context.Context, renderTimeValues map[string]any)
 		if err != nil {
 			return nil, fmt.Errorf(
 				"error applying filters/transformers to helm chart %s (release: %s): %w",
-				r.inputs[i].Chart,
-				r.inputs[i].ReleaseName,
+				r.sources[i].Chart,
+				r.sources[i].ReleaseName,
 				err,
 			)
 		}
