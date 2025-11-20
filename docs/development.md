@@ -91,6 +91,18 @@ if err != nil {
 - Interfaces: `-er` suffix (e.g., `Loader`, `Validator`)
 - Test functions: `Test<FunctionName>` with `t.Run()` subtests
 
+### Project-Specific Guidelines
+
+**Package Documentation**:
+- Package-level documentation is intentionally minimal at this stage
+- Focus on godoc comments for exported types and functions
+- Package comments will be added when the API stabilizes
+
+**Testing Scope**:
+- Cache performance tests belong in the cache package, not renderer packages
+- Renderer tests focus on rendering logic and integration
+- Performance benchmarks should test renderer-specific operations only
+
 ### Functional Options Pattern
 
 All configuration uses the functional options pattern:
