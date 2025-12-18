@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"sync"
 
-	"helm.sh/helm/v3/pkg/chartutil"
-	"helm.sh/helm/v3/pkg/cli"
-	"helm.sh/helm/v3/pkg/engine"
+	"helm.sh/helm/v4/pkg/chart/common"
+	commonutil "helm.sh/helm/v4/pkg/chart/common/util"
+	chartutil "helm.sh/helm/v4/pkg/chart/v2/util"
+	"helm.sh/helm/v4/pkg/cli"
+	"helm.sh/helm/v4/pkg/engine"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
@@ -188,7 +190,7 @@ func (r *Renderer) processValues(
 	ctx context.Context,
 	holder *sourceHolder,
 	renderTimeValues map[string]any,
-) (chartutil.Values, error) {
+) (common.Values, error) {
 	values, err := r.values(ctx, holder, renderTimeValues)
 	if err != nil {
 		return nil, fmt.Errorf(
@@ -210,10 +212,10 @@ func (r *Renderer) processValues(
 		}
 	}
 
-	renderValues, err := chartutil.ToRenderValues(
+	renderValues, err := commonutil.ToRenderValues(
 		holder.chart,
 		values,
-		chartutil.ReleaseOptions{
+		common.ReleaseOptions{
 			Name:      holder.ReleaseName,
 			Revision:  1,
 			IsInstall: true,

@@ -3,7 +3,7 @@ package helm
 import (
 	"fmt"
 
-	"helm.sh/helm/v3/pkg/chartutil"
+	"helm.sh/helm/v4/pkg/chart/common"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
@@ -15,7 +15,7 @@ type chartSpec struct {
 	Chart          string
 	ReleaseName    string
 	ReleaseVersion string
-	Values         chartutil.Values
+	Values         common.Values
 }
 
 // FastCacheKeyFunc generates cache keys based only on chart identity, ignoring values.

@@ -9,7 +9,7 @@ This file provides guidance for AI assistants (like Claude) when working with th
 **Key Dependencies**:
 - `github.com/k8s-manifest-kit/engine/pkg` - Core engine and type definitions
 - `github.com/k8s-manifest-kit/pkg` - Shared utilities (caching, errors, options)
-- `helm.sh/helm/v3` - Helm SDK for chart operations
+- `helm.sh/helm/v4` - Helm SDK for chart operations
 - `k8s.io/apimachinery` - Kubernetes object handling
 
 ## Architecture Overview

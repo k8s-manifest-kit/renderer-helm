@@ -4,6 +4,8 @@ Helm chart renderer with OCI support
 
 Part of the [k8s-manifest-kit](https://github.com/k8s-manifest-kit) organization.
 
+**Helm Version**: Uses Helm v4 SDK.
+
 ## Installation
 
 ```bash

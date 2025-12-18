@@ -4,6 +4,8 @@
 
 The Helm renderer provides native integration with Helm charts, enabling programmatic rendering of Helm charts from multiple sources (OCI registries, Helm repositories, local filesystem) within the k8s-manifest-kit ecosystem.
 
+**Helm Version**: This library uses Helm v4 SDK (`helm.sh/helm/v4`).
+
 ## Architecture
 
 ### Core Components

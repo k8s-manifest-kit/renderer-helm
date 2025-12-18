@@ -59,7 +59,7 @@ import (
     "fmt"
     
     // Third-party (default)
-    "helm.sh/helm/v3/pkg/chart"
+    "helm.sh/helm/v4/pkg/chart/v2"
     
     // Kubernetes
     "k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
