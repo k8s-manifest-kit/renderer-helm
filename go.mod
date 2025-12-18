@@ -1,6 +1,6 @@
 module github.com/k8s-manifest-kit/renderer-helm
 
-go 1.24.10
+go 1.24.11
 
 require (
 	github.com/k8s-manifest-kit/engine v0.1.0
