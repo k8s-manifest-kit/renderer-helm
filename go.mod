@@ -5,7 +5,7 @@ go 1.24.11
 require (
 	github.com/k8s-manifest-kit/engine v0.1.0
 	github.com/k8s-manifest-kit/pkg v0.1.0
-	github.com/onsi/gomega v1.38.3
+	github.com/onsi/gomega v1.39.0
 	github.com/rs/xid v1.6.0
 	helm.sh/helm/v4 v4.0.4
 	k8s.io/api v0.34.2
