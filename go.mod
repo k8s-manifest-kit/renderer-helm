@@ -7,7 +7,7 @@ require (
 	github.com/k8s-manifest-kit/pkg v0.1.0
 	github.com/onsi/gomega v1.38.3
 	github.com/rs/xid v1.6.0
-	helm.sh/helm/v4 v4.0.4
+	helm.sh/helm/v4 v4.0.5
 	k8s.io/api v0.34.2
 	k8s.io/apimachinery v0.34.2
 )
