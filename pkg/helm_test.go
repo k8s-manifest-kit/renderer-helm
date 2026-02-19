@@ -1056,12 +1056,10 @@ func TestRenderer_ErrorPaths(t *testing.T) {
 		errorChan := make(chan error, 5)
 
 		for range 5 {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				_, err := renderer.Process(t.Context(), nil)
 				errorChan <- err
-			}()
+			})
 		}
 
 		wg.Wait()

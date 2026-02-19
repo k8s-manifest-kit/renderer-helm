@@ -6,7 +6,7 @@ LINT_GOGC := 10
 LINT_TIMEOUT := 10m
 
 ## Tools
-GOLANGCI_VERSION ?= v2.6.0
+GOLANGCI_VERSION ?= v2.10.1
 GOLANGCI ?= go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_VERSION)
 GOVULNCHECK_VERSION ?= latest
 GOVULNCHECK ?= go run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION)

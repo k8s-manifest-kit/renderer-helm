@@ -27,7 +27,7 @@ type Credentials struct {
 	Username string
 
 	// Password for basic authentication
-	Password string
+	Password string //nolint:gosec // not a hardcoded credential, just a field name
 }
 
 // Source defines a Helm chart source for rendering.
