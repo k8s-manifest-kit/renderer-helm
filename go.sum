@@ -180,8 +180,8 @@ github.com/json-iterator/go v1.1.12 h1:PV8peI4a0ysnczrg+LtxykD8LfKY9ML6u2jnxaEnr
 github.com/json-iterator/go v1.1.12/go.mod h1:e30LSqwooZae/UwlEbR2852Gd8hjQvJoHmT4TnhNGBo=
 github.com/k8s-manifest-kit/engine v0.2.1-0.20260228164016-c1dc25076aaf h1:BFdbHvKe+dC6hP2sTGb7Hs7YpJTYfxHkO7pFpaD8PRA=
 github.com/k8s-manifest-kit/engine v0.2.1-0.20260228164016-c1dc25076aaf/go.mod h1:EOhtGTA5bkZMzYmuJOYXb88Q07Hsms9yHuiQI2N/3Fs=
-github.com/k8s-manifest-kit/pkg v0.2.1-0.20260228162930-b24074ba9a2b h1:EecOMi/cp20JvZHVC+/7VpGZ0wDwhf6v0HET3r/tVac=
-github.com/k8s-manifest-kit/pkg v0.2.1-0.20260228162930-b24074ba9a2b/go.mod h1:1t3uxa3giBzrCQXR/5fR1SG436JNg5t1UVRss+eiBTw=
+github.com/k8s-manifest-kit/pkg v0.2.1-0.20260228165511-fcbee2e88a23 h1:fc5TeNbYtRtvo66Zo7h8FUpAxBovb4j/sZKFRyV4aVM=
+github.com/k8s-manifest-kit/pkg v0.2.1-0.20260228165511-fcbee2e88a23/go.mod h1:1t3uxa3giBzrCQXR/5fR1SG436JNg5t1UVRss+eiBTw=
 github.com/klauspost/compress v1.18.0 h1:c/Cqfb0r+Yi+JtIEq73FWXVkRonBlf0CRNYc8Zttxdo=
 github.com/klauspost/compress v1.18.0/go.mod h1:2Pp+KzxcywXVXMr50+X0Q/Lsb43OQHYWRCY2AiWywWQ=
 github.com/kr/pretty v0.3.1 h1:flRD4NNwYAUpkphVc1HcthR4KEIFJ65n8Mw5qdRn3LE=
