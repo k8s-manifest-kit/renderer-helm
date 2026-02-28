@@ -925,6 +925,140 @@ func TestSourceAnnotations(t *testing.T) {
 	})
 }
 
+func TestContentHash(t *testing.T) {
+
+	t.Run("should add content hash annotation by default", func(t *testing.T) {
+		g := NewWithT(t)
+		renderer, err := helm.New([]helm.Source{
+			{
+				Chart:       testChartPath,
+				ReleaseName: "hash-test",
+				Values: helm.Values(map[string]any{
+					"replicaCount": 1,
+				}),
+			},
+		})
+		g.Expect(err).ToNot(HaveOccurred())
+
+		objects, err := renderer.Process(t.Context(), nil)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(objects).ToNot(BeEmpty())
+
+		for _, obj := range objects {
+			annotations := obj.GetAnnotations()
+			g.Expect(annotations).Should(HaveKey(types.AnnotationContentHash))
+			g.Expect(annotations[types.AnnotationContentHash]).Should(MatchRegexp("^sha256:[0-9a-f]{64}$"))
+		}
+	})
+
+	t.Run("should not add content hash when disabled", func(t *testing.T) {
+		g := NewWithT(t)
+		renderer, err := helm.New(
+			[]helm.Source{
+				{
+					Chart:       testChartPath,
+					ReleaseName: "no-hash-test",
+					Values: helm.Values(map[string]any{
+						"replicaCount": 1,
+					}),
+				},
+			},
+			helm.WithContentHash(false),
+		)
+		g.Expect(err).ToNot(HaveOccurred())
+
+		objects, err := renderer.Process(t.Context(), nil)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(objects).ToNot(BeEmpty())
+
+		for _, obj := range objects {
+			annotations := obj.GetAnnotations()
+			g.Expect(annotations).ShouldNot(HaveKey(types.AnnotationContentHash))
+		}
+	})
+
+	t.Run("hash should change when values change", func(t *testing.T) {
+		g := NewWithT(t)
+
+		r1, err := helm.New([]helm.Source{
+			{
+				Chart:       testChartPath,
+				ReleaseName: "hash-change",
+				Values: helm.Values(map[string]any{
+					"replicaCount": 1,
+				}),
+			},
+		})
+		g.Expect(err).ToNot(HaveOccurred())
+		objects1, err := r1.Process(t.Context(), nil)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(objects1).ToNot(BeEmpty())
+
+		r2, err := helm.New([]helm.Source{
+			{
+				Chart:       testChartPath,
+				ReleaseName: "hash-change",
+				Values: helm.Values(map[string]any{
+					"replicaCount": 5,
+				}),
+			},
+		})
+		g.Expect(err).ToNot(HaveOccurred())
+		objects2, err := r2.Process(t.Context(), nil)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(objects2).ToNot(BeEmpty())
+
+		// Find the Deployment in each result -- replicaCount is templated so hash must differ
+		var hash1, hash2 string
+		for _, obj := range objects1 {
+			if obj.GetKind() == "Deployment" {
+				hash1 = obj.GetAnnotations()[types.AnnotationContentHash]
+			}
+		}
+		for _, obj := range objects2 {
+			if obj.GetKind() == "Deployment" {
+				hash2 = obj.GetAnnotations()[types.AnnotationContentHash]
+			}
+		}
+
+		g.Expect(hash1).ShouldNot(BeEmpty())
+		g.Expect(hash2).ShouldNot(BeEmpty())
+		g.Expect(hash1).ShouldNot(Equal(hash2))
+	})
+
+	t.Run("cached results should preserve content hash", func(t *testing.T) {
+		g := NewWithT(t)
+		renderer, err := helm.New(
+			[]helm.Source{
+				{
+					Chart:       testChartPath,
+					ReleaseName: "cache-hash-test",
+					Values: helm.Values(map[string]any{
+						"replicaCount": 2,
+					}),
+				},
+			},
+			helm.WithCache(),
+		)
+		g.Expect(err).ToNot(HaveOccurred())
+
+		result1, err := renderer.Process(t.Context(), nil)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(result1).ToNot(BeEmpty())
+
+		result2, err := renderer.Process(t.Context(), nil)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(result2).To(HaveLen(len(result1)))
+
+		for i := range result1 {
+			hash1 := result1[i].GetAnnotations()[types.AnnotationContentHash]
+			hash2 := result2[i].GetAnnotations()[types.AnnotationContentHash]
+			g.Expect(hash1).ShouldNot(BeEmpty())
+			g.Expect(hash1).Should(Equal(hash2))
+		}
+	})
+}
+
 func TestCredentials(t *testing.T) {
 
 	t.Run("should work with nil credentials", func(t *testing.T) {

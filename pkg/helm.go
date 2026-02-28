@@ -81,6 +81,7 @@ func New(inputs []Source, opts ...RendererOption) (*Renderer, error) {
 	rendererOpts := RendererOptions{
 		Filters:      make([]types.Filter, 0),
 		Transformers: make([]types.Transformer, 0),
+		ContentHash:  true,
 	}
 
 	// Apply options

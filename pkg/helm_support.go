@@ -208,6 +208,18 @@ func createChartPathOptions(
 	return opt, nil
 }
 
+// addContentHash computes and adds a content hash annotation to each object.
+// Only modifies objects if content hash is enabled in renderer options.
+func (r *Renderer) addContentHash(objects []unstructured.Unstructured) {
+	if !r.opts.ContentHash {
+		return
+	}
+
+	for i := range objects {
+		types.SetContentHash(&objects[i])
+	}
+}
+
 // addSourceAnnotations adds source tracking annotations to a slice of unstructured objects.
 // Only modifies objects if source annotations are enabled in renderer options.
 func (r *Renderer) addSourceAnnotations(
@@ -248,6 +260,7 @@ func (r *Renderer) processCRDs(
 		}
 
 		r.addSourceAnnotations(objects, holder.Chart, crd.Name)
+		r.addContentHash(objects)
 		result = append(result, objects...)
 	}
 
@@ -277,6 +290,7 @@ func (r *Renderer) processRenderedTemplates(
 		}
 
 		r.addSourceAnnotations(objects, holder.Chart, k)
+		r.addContentHash(objects)
 		result = append(result, objects...)
 	}
 
