@@ -100,8 +100,8 @@ func TestRenderer(t *testing.T) {
 
 	t.Run("should render with dynamic values", func(t *testing.T) {
 		g := NewWithT(t)
-		dynamicValues := func(_ context.Context) (map[string]any, error) {
-			return map[string]any{
+		dynamicValues := func(_ context.Context) (types.Values, error) {
+			return types.Values{
 				"replicaCount": 3,
 				"image": map[string]any{
 					"tag": xid.New().String(),
@@ -257,13 +257,13 @@ func TestRenderer(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		cancel() // Cancel immediately
 
-		valuesFn := func(ctx context.Context) (map[string]any, error) {
+		valuesFn := func(ctx context.Context) (types.Values, error) {
 			// Check if context is cancelled
 			select {
 			case <-ctx.Done():
 				return nil, ctx.Err()
 			default:
-				return map[string]any{}, nil
+				return types.Values{}, nil
 			}
 		}
 
@@ -521,7 +521,7 @@ func TestValuesHelper(t *testing.T) {
 		result, err := valuesFn(t.Context())
 
 		g.Expect(err).ToNot(HaveOccurred())
-		g.Expect(result).To(Equal(staticValues))
+		g.Expect(result).To(Equal(types.Values(staticValues)))
 	})
 
 	t.Run("should work with nil values", func(t *testing.T) {
@@ -539,13 +539,13 @@ func TestValuesHelper(t *testing.T) {
 		result, err := valuesFn(t.Context())
 
 		g.Expect(err).ToNot(HaveOccurred())
-		g.Expect(result).To(Equal(map[string]any{}))
+		g.Expect(result).To(Equal(types.Values(map[string]any{})))
 	})
 
 	t.Run("should handle Values function returning nil", func(t *testing.T) {
 		g := NewWithT(t)
 
-		nilValuesFunc := func(_ context.Context) (map[string]any, error) {
+		nilValuesFunc := func(_ context.Context) (types.Values, error) {
 			return nil, nil //nolint:nilnil // Intentionally testing nil return
 		}
 
@@ -601,10 +601,10 @@ func TestCacheIntegration(t *testing.T) {
 	t.Run("should miss cache on different values", func(t *testing.T) {
 		g := NewWithT(t)
 		callCount := 0
-		dynamicValues := func(_ context.Context) (map[string]any, error) {
+		dynamicValues := func(_ context.Context) (types.Values, error) {
 			callCount++
 
-			return map[string]any{
+			return types.Values{
 				"replicaCount": callCount,
 				"image": map[string]any{
 					"tag": xid.New().String(),
@@ -790,8 +790,8 @@ func BenchmarkHelmRenderCacheMiss(b *testing.B) {
 			{
 				Chart:       "oci://registry-1.docker.io/daprio/dapr-shared-chart",
 				ReleaseName: "bench-miss",
-				Values: func(_ context.Context) (map[string]any, error) {
-					return map[string]any{
+				Values: func(_ context.Context) (types.Values, error) {
+					return types.Values{
 						"shared": map[string]any{
 							"appId": xid.New().String(),
 						},
@@ -1345,7 +1345,7 @@ data:
 		g := NewWithT(t)
 
 		customErr := errors.New("database connection failed")
-		errorValuesFunc := func(_ context.Context) (map[string]any, error) {
+		errorValuesFunc := func(_ context.Context) (types.Values, error) {
 			return nil, customErr
 		}
 

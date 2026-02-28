@@ -15,8 +15,8 @@ import (
 
 	"github.com/k8s-manifest-kit/engine/pkg/pipeline"
 	"github.com/k8s-manifest-kit/engine/pkg/types"
-	"github.com/k8s-manifest-kit/pkg/util"
 	"github.com/k8s-manifest-kit/pkg/util/cache"
+	"github.com/k8s-manifest-kit/pkg/util/maps"
 )
 
 const rendererType = "helm"
@@ -49,7 +49,7 @@ type Source struct {
 	// Values provides template variable overrides during chart rendering.
 	// Function is called during rendering to obtain dynamic values.
 	// Merged with chart defaults via chartutil.ToRenderValues.
-	Values func(context.Context) (map[string]any, error)
+	Values func(context.Context) (types.Values, error)
 
 	// Credentials provides authentication credentials for accessing the chart.
 	// Function is called during chart loading to obtain credentials dynamically.
@@ -60,6 +60,10 @@ type Source struct {
 	// If true, chartutil.ProcessDependencies will be called during rendering.
 	// Default is false.
 	ProcessDependencies bool
+
+	// PostRenderers are source-specific post-renderers applied to this source's output
+	// before combining with other sources.
+	PostRenderers []types.PostRenderer
 }
 
 // Renderer handles Helm rendering operations.
@@ -122,11 +126,27 @@ func New(inputs []Source, opts ...RendererOption) (*Renderer, error) {
 // Process executes the rendering logic for all configured sources.
 // It implements the types.Renderer interface.
 // This method is safe for concurrent use.
-func (r *Renderer) Process(ctx context.Context, renderTimeValues map[string]any) ([]unstructured.Unstructured, error) {
+func (r *Renderer) Process(ctx context.Context, renderTimeValues types.Values) ([]unstructured.Unstructured, error) {
 	allObjects := make([]unstructured.Unstructured, 0)
 
 	for i := range r.sources {
-		objects, err := r.processSingle(ctx, r.sources[i], renderTimeValues)
+		selected, err := pipeline.ApplySourceSelectors(ctx, r.sources[i].Source, r.opts.SourceSelectors)
+		if err != nil {
+			return nil, fmt.Errorf(
+				"source selector error for helm chart %s (release: %s): %w",
+				r.sources[i].Chart,
+				r.sources[i].ReleaseName,
+				err,
+			)
+		}
+
+		if !selected {
+			continue
+		}
+
+		sValues := renderTimeValues.DeepClone()
+
+		objects, err := r.processSingle(ctx, r.sources[i], sValues)
 		if err != nil {
 			return nil, fmt.Errorf(
 				"error rendering helm chart %s (release: %s): %w",
@@ -136,21 +156,27 @@ func (r *Renderer) Process(ctx context.Context, renderTimeValues map[string]any)
 			)
 		}
 
-		// Apply renderer-level filters and transformers per-source for better error context
-		transformed, err := pipeline.Apply(ctx, objects, r.opts.Filters, r.opts.Transformers)
+		objects, err = pipeline.ApplyPostRenderers(ctx, objects, r.sources[i].PostRenderers)
 		if err != nil {
 			return nil, fmt.Errorf(
-				"error applying filters/transformers to helm chart %s (release: %s): %w",
+				"source post-renderer error for helm chart %s (release: %s): %w",
 				r.sources[i].Chart,
 				r.sources[i].ReleaseName,
 				err,
 			)
 		}
 
-		allObjects = append(allObjects, transformed...)
+		allObjects = append(allObjects, objects...)
 	}
 
-	return allObjects, nil
+	chain := types.BuildPostRendererChain(r.opts.Filters, r.opts.Transformers, r.opts.PostRenderers)
+
+	result, err := pipeline.ApplyPostRenderers(ctx, allObjects, chain)
+	if err != nil {
+		return nil, fmt.Errorf("renderer post-renderer error: %w", err)
+	}
+
+	return result, nil
 }
 
 // Name returns the renderer type identifier.
@@ -161,9 +187,9 @@ func (r *Renderer) Name() string {
 func (r *Renderer) values(
 	ctx context.Context,
 	holder *sourceHolder,
-	renderTimeValues map[string]any,
-) (map[string]any, error) {
-	sourceValues := map[string]any{}
+	renderTimeValues types.Values,
+) (types.Values, error) {
+	sourceValues := types.Values{}
 
 	if holder.Values != nil {
 		v, err := holder.Values(ctx)
@@ -175,14 +201,13 @@ func (r *Renderer) values(
 				err,
 			)
 		}
-		// Only use returned values if not nil
+
 		if v != nil {
 			sourceValues = v
 		}
 	}
 
-	// Deep merge with render-time values taking precedence
-	return util.DeepMerge(sourceValues, renderTimeValues), nil
+	return types.Values(maps.DeepMerge(map[string]any(sourceValues), map[string]any(renderTimeValues))), nil
 }
 
 // processValues gets values from the Values function, processes dependencies,
@@ -190,7 +215,7 @@ func (r *Renderer) values(
 func (r *Renderer) processValues(
 	ctx context.Context,
 	holder *sourceHolder,
-	renderTimeValues map[string]any,
+	renderTimeValues types.Values,
 ) (common.Values, error) {
 	values, err := r.values(ctx, holder, renderTimeValues)
 	if err != nil {
@@ -203,7 +228,7 @@ func (r *Renderer) processValues(
 	}
 
 	if holder.ProcessDependencies {
-		if err := chartutil.ProcessDependencies(holder.chart, values); err != nil {
+		if err := chartutil.ProcessDependencies(holder.chart, map[string]any(values)); err != nil {
 			return nil, fmt.Errorf(
 				"failed to process dependencies for chart %q (release %q): %w",
 				holder.Chart,
@@ -215,7 +240,7 @@ func (r *Renderer) processValues(
 
 	renderValues, err := commonutil.ToRenderValues(
 		holder.chart,
-		values,
+		map[string]any(values),
 		common.ReleaseOptions{
 			Name:      holder.ReleaseName,
 			Revision:  1,
@@ -241,7 +266,7 @@ func (r *Renderer) processValues(
 func (r *Renderer) processSingle(
 	ctx context.Context,
 	holder *sourceHolder,
-	renderTimeValues map[string]any,
+	renderTimeValues types.Values,
 ) ([]unstructured.Unstructured, error) {
 	// Load chart if not already loaded (thread-safe lazy loading)
 	chart, err := holder.LoadChart(ctx, r.settings)

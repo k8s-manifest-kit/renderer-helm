@@ -19,6 +19,12 @@ type RendererOptions struct {
 	// Transformers are renderer-specific transformers applied during Process().
 	Transformers []types.Transformer
 
+	// PostRenderers are renderer-specific post-renderers applied during Process().
+	PostRenderers []types.PostRenderer
+
+	// SourceSelectors are renderer-specific source selectors evaluated before rendering each source.
+	SourceSelectors []types.SourceSelector
+
 	// Settings customizes the Helm environment configuration.
 	// Nil means use default settings.
 	Settings *cli.EnvSettings
@@ -46,6 +52,8 @@ type RendererOptions struct {
 func (opts RendererOptions) ApplyTo(target *RendererOptions) {
 	target.Filters = opts.Filters
 	target.Transformers = opts.Transformers
+	target.PostRenderers = append(target.PostRenderers, opts.PostRenderers...)
+	target.SourceSelectors = append(target.SourceSelectors, opts.SourceSelectors...)
 
 	if opts.Settings != nil {
 		target.Settings = opts.Settings
@@ -65,8 +73,6 @@ func (opts RendererOptions) ApplyTo(target *RendererOptions) {
 }
 
 // WithFilter adds a renderer-specific filter to this Helm renderer's processing chain.
-// Renderer-specific filters are applied during Process(), before results are returned to the engine.
-// For engine-level filtering applied to all renderers, use engine.WithFilter.
 func WithFilter(f types.Filter) RendererOption {
 	return util.FunctionalOption[RendererOptions](func(opts *RendererOptions) {
 		opts.Filters = append(opts.Filters, f)
@@ -74,11 +80,27 @@ func WithFilter(f types.Filter) RendererOption {
 }
 
 // WithTransformer adds a renderer-specific transformer to this Helm renderer's processing chain.
-// Renderer-specific transformers are applied during Process(), before results are returned to the engine.
-// For engine-level transformation applied to all renderers, use engine.WithTransformer.
 func WithTransformer(t types.Transformer) RendererOption {
 	return util.FunctionalOption[RendererOptions](func(opts *RendererOptions) {
 		opts.Transformers = append(opts.Transformers, t)
+	})
+}
+
+// WithPostRenderer adds a renderer-specific post-renderer to this Helm renderer's processing chain.
+// Post-renderers run after all sources have been rendered and combined, after Filters and Transformers.
+func WithPostRenderer(p types.PostRenderer) RendererOption {
+	return util.FunctionalOption[RendererOptions](func(opts *RendererOptions) {
+		opts.PostRenderers = append(opts.PostRenderers, p)
+	})
+}
+
+// WithSourceSelector adds a source selector to this Helm renderer.
+// Source selectors are evaluated before rendering each source. If any selector
+// returns false, the source is skipped entirely.
+// Use source.Selector[helm.Source] to build type-safe selectors.
+func WithSourceSelector(s types.SourceSelector) RendererOption {
+	return util.FunctionalOption[RendererOptions](func(opts *RendererOptions) {
+		opts.SourceSelectors = append(opts.SourceSelectors, s)
 	})
 }
 
@@ -90,13 +112,6 @@ func WithSettings(settings *cli.EnvSettings) RendererOption {
 }
 
 // WithCache enables render result caching with the specified options.
-// If no options are provided, uses default TTL of 5 minutes.
-// By default, caching is NOT enabled.
-//
-// Example:
-//
-//	helm.WithCache(cache.WithTTL(10*time.Minute))
-//	helm.WithCache(cache.WithTTL(5*time.Minute), cache.WithKeyFunc(myKeyFunc))
 func WithCache(opts ...cache.Option) RendererOption {
 	return util.FunctionalOption[RendererOptions](func(rendererOpts *RendererOptions) {
 		if rendererOpts.CacheOptions == nil {
@@ -110,9 +125,6 @@ func WithCache(opts ...cache.Option) RendererOption {
 }
 
 // WithSourceAnnotations enables or disables automatic addition of source tracking annotations.
-// When enabled, the renderer adds metadata annotations to track the source type, chart, and template file.
-// Annotations added: manifests.k8s-manifests-lib/source.type, source.path, source.file.
-// Default: false (disabled).
 func WithSourceAnnotations(enabled bool) RendererOption {
 	return util.FunctionalOption[RendererOptions](func(opts *RendererOptions) {
 		opts.SourceAnnotations = enabled
@@ -120,8 +132,6 @@ func WithSourceAnnotations(enabled bool) RendererOption {
 }
 
 // WithContentHash enables or disables automatic addition of a SHA-256 content hash annotation.
-// When enabled, each rendered resource gets an annotation with a hash of its content.
-// Default: true (enabled).
 func WithContentHash(enabled bool) RendererOption {
 	return util.FunctionalOption[RendererOptions](func(opts *RendererOptions) {
 		opts.ContentHash = enabled
@@ -129,9 +139,6 @@ func WithContentHash(enabled bool) RendererOption {
 }
 
 // WithLintMode enables or disables lint mode during template rendering.
-// When enabled, some 'required' template values may be missing without causing rendering to fail.
-// This is useful during linting when not all values are available.
-// Default: false (disabled).
 func WithLintMode(enabled bool) RendererOption {
 	return util.FunctionalOption[RendererOptions](func(opts *RendererOptions) {
 		opts.LintMode = enabled
@@ -139,9 +146,6 @@ func WithLintMode(enabled bool) RendererOption {
 }
 
 // WithStrict enables or disables strict template rendering mode.
-// When enabled, template rendering will fail if a template references a value that was not passed in.
-// This helps catch missing values early during development.
-// Default: false (disabled).
 func WithStrict(enabled bool) RendererOption {
 	return util.FunctionalOption[RendererOptions](func(opts *RendererOptions) {
 		opts.Strict = enabled
