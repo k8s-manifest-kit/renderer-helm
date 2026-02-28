@@ -231,7 +231,7 @@ The renderer is designed for concurrent use:
 - `sync.Once` ensures chart loading happens exactly once
 - Each `Process()` call gets deep-cloned cache entries
 
-**Rationale**: Enables parallel rendering in the engine when multiple Helm sources are configured.
+**Rationale**: Enables safe use when multiple callers invoke Process() concurrently.
 
 ### 7. Source Annotations
 
@@ -332,7 +332,6 @@ engine := helm.NewEngine(helm.Source{...}, opts...)
 
 Both approaches support:
 - Engine-level filters and transformers
-- Parallel rendering with other renderers
 - Render-time value injection
 - Caching and metrics collection
 

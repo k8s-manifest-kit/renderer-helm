@@ -32,7 +32,7 @@ type Source struct {
 - Implements `types.Renderer` interface
 - Supports multiple sources (charts)
 - Lazy chart loading with `sync.Once`
-- Thread-safe concurrent rendering
+- Thread-safe rendering
 - Optional caching with TTL
 
 **Options** (`pkg/helm_option.go`):
