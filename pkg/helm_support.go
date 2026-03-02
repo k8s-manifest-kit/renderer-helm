@@ -8,16 +8,14 @@ import (
 	"strings"
 	"sync"
 
-	"helm.sh/helm/v4/pkg/action"
 	chart "helm.sh/helm/v4/pkg/chart/v2"
 	"helm.sh/helm/v4/pkg/chart/v2/loader"
-	"helm.sh/helm/v4/pkg/cli"
-	"helm.sh/helm/v4/pkg/registry"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	"github.com/k8s-manifest-kit/engine/pkg/types"
 	"github.com/k8s-manifest-kit/pkg/util/k8s"
+	"github.com/k8s-manifest-kit/renderer-helm/pkg/locator"
 )
 
 const (
@@ -60,9 +58,9 @@ func Values(values map[string]any) func(context.Context) (types.Values, error) {
 
 // StaticCredentials returns a Credentials function that always returns the provided credentials.
 // This is a convenience helper for the common case of static authentication.
-func StaticCredentials(username string, password string) func(context.Context) (*Credentials, error) {
-	return func(_ context.Context) (*Credentials, error) {
-		return &Credentials{
+func StaticCredentials(username string, password string) func(context.Context) (*locator.Credentials, error) {
+	return func(_ context.Context) (*locator.Credentials, error) {
+		return &locator.Credentials{
 			Username: username,
 			Password: password,
 		}, nil
@@ -113,7 +111,7 @@ func (h *sourceHolder) Validate() error {
 // Thread-safe for concurrent use with optimized read-path performance.
 func (h *sourceHolder) LoadChart(
 	ctx context.Context,
-	settings *cli.EnvSettings,
+	repositoryCache string,
 ) (*chart.Chart, error) {
 	// Fast path: read lock for checking if chart is already loaded
 	// Multiple goroutines can check concurrently
@@ -141,12 +139,13 @@ func (h *sourceHolder) LoadChart(
 		return nil, fmt.Errorf("context cancelled during chart load: %w", err)
 	}
 
-	opt, err := createChartPathOptions(ctx, &h.Source)
-	if err != nil {
-		return nil, err
-	}
-
-	path, err := opt.LocateChart(h.Chart, settings)
+	path, err := locator.Locate(ctx, &locator.Request{
+		Name:            h.Chart,
+		RepoURL:         h.Repo,
+		Version:         h.ReleaseVersion,
+		Credentials:     h.Credentials,
+		RepositoryCache: repositoryCache,
+	})
 	if err != nil {
 		return nil, fmt.Errorf(
 			"unable to locate chart (repo: %s, name: %s, version: %s): %w",
@@ -171,41 +170,6 @@ func (h *sourceHolder) LoadChart(
 	h.chart = c
 
 	return h.chart, nil
-}
-
-// createChartPathOptions creates ChartPathOptions for a Source.
-// Creates a fresh registry client and install instance per call.
-// This allows each Source to have different credential/authentication requirements.
-func createChartPathOptions(
-	ctx context.Context,
-	source *Source,
-) (action.ChartPathOptions, error) {
-	c, err := registry.NewClient()
-	if err != nil {
-		return action.ChartPathOptions{}, fmt.Errorf("unable to create registry client: %w", err)
-	}
-
-	install := action.NewInstall(&action.Configuration{
-		RegistryClient: c,
-	})
-
-	opt := install.ChartPathOptions
-	opt.RepoURL = source.Repo
-	opt.Version = source.ReleaseVersion
-
-	if source.Credentials != nil {
-		creds, err := source.Credentials(ctx)
-		if err != nil {
-			return action.ChartPathOptions{}, fmt.Errorf("failed to get credentials: %w", err)
-		}
-
-		if creds != nil {
-			opt.Username = creds.Username
-			opt.Password = creds.Password
-		}
-	}
-
-	return opt, nil
 }
 
 // addContentHash computes and adds a content hash annotation to each object.

@@ -1,8 +1,6 @@
 package helm
 
 import (
-	"helm.sh/helm/v4/pkg/cli"
-
 	"github.com/k8s-manifest-kit/engine/pkg/types"
 	"github.com/k8s-manifest-kit/pkg/util"
 	"github.com/k8s-manifest-kit/pkg/util/cache"
@@ -25,9 +23,14 @@ type RendererOptions struct {
 	// SourceSelectors are renderer-specific source selectors evaluated before rendering each source.
 	SourceSelectors []SourceSelector
 
-	// Settings customizes the Helm environment configuration.
-	// Nil means use default settings.
-	Settings *cli.EnvSettings
+	// RepositoryConfig is the path to the repositories file.
+	RepositoryConfig string
+
+	// RepositoryCache is the path to the repository cache directory.
+	RepositoryCache string
+
+	// ContentCache is the path to the content-addressable cache directory.
+	ContentCache string
 
 	// CacheOptions holds cache configuration. nil = caching disabled.
 	CacheOptions *cache.Options
@@ -55,8 +58,16 @@ func (opts RendererOptions) ApplyTo(target *RendererOptions) {
 	target.PostRenderers = append(target.PostRenderers, opts.PostRenderers...)
 	target.SourceSelectors = append(target.SourceSelectors, opts.SourceSelectors...)
 
-	if opts.Settings != nil {
-		target.Settings = opts.Settings
+	if opts.RepositoryConfig != "" {
+		target.RepositoryConfig = opts.RepositoryConfig
+	}
+
+	if opts.RepositoryCache != "" {
+		target.RepositoryCache = opts.RepositoryCache
+	}
+
+	if opts.ContentCache != "" {
+		target.ContentCache = opts.ContentCache
 	}
 
 	if opts.CacheOptions != nil {
@@ -103,10 +114,24 @@ func WithSourceSelector(s SourceSelector) RendererOption {
 	})
 }
 
-// WithSettings allows customizing the Helm environment settings.
-func WithSettings(settings *cli.EnvSettings) RendererOption {
+// WithRepositoryConfig sets the path to the repositories file.
+func WithRepositoryConfig(path string) RendererOption {
 	return util.FunctionalOption[RendererOptions](func(opts *RendererOptions) {
-		opts.Settings = settings
+		opts.RepositoryConfig = path
+	})
+}
+
+// WithRepositoryCache sets the path to the repository cache directory.
+func WithRepositoryCache(path string) RendererOption {
+	return util.FunctionalOption[RendererOptions](func(opts *RendererOptions) {
+		opts.RepositoryCache = path
+	})
+}
+
+// WithContentCache sets the path to the content-addressable cache directory.
+func WithContentCache(path string) RendererOption {
+	return util.FunctionalOption[RendererOptions](func(opts *RendererOptions) {
+		opts.ContentCache = path
 	})
 }
 
