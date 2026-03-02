@@ -17,6 +17,7 @@ import (
 	"github.com/k8s-manifest-kit/engine/pkg/types"
 	"github.com/k8s-manifest-kit/pkg/util/cache"
 	helm "github.com/k8s-manifest-kit/renderer-helm/pkg"
+	"github.com/k8s-manifest-kit/renderer-helm/pkg/locator"
 
 	. "github.com/onsi/gomega"
 )
@@ -1096,10 +1097,10 @@ func TestCredentials(t *testing.T) {
 	t.Run("should work with dynamic credentials", func(t *testing.T) {
 		g := NewWithT(t)
 		callCount := 0
-		dynamicCreds := func(_ context.Context) (*helm.Credentials, error) {
+		dynamicCreds := func(_ context.Context) (*locator.Credentials, error) {
 			callCount++
 
-			return &helm.Credentials{
+			return &locator.Credentials{
 				Username: "dynamic-user",
 				Password: "dynamic-pass",
 			}, nil
@@ -1118,20 +1119,14 @@ func TestCredentials(t *testing.T) {
 		g.Expect(err).ToNot(HaveOccurred())
 		g.Expect(objects).To(HaveLen(3))
 
-		// Credentials function should be called during chart loading
-		g.Expect(callCount).To(Equal(1))
-
-		// Second render should not call credentials again (chart already loaded)
-		objects, err = renderer.Process(t.Context(), nil)
-		g.Expect(err).ToNot(HaveOccurred())
-		g.Expect(objects).To(HaveLen(3))
-		g.Expect(callCount).To(Equal(1))
+		// Credentials are resolved lazily and skipped for local paths.
+		g.Expect(callCount).To(Equal(0))
 	})
 
 	t.Run("should handle credentials function returning empty credentials", func(t *testing.T) {
 		g := NewWithT(t)
-		emptyCreds := func(_ context.Context) (*helm.Credentials, error) {
-			return &helm.Credentials{}, nil
+		emptyCreds := func(_ context.Context) (*locator.Credentials, error) {
+			return &locator.Credentials{}, nil
 		}
 
 		renderer, err := helm.New([]helm.Source{
@@ -1148,9 +1143,9 @@ func TestCredentials(t *testing.T) {
 		g.Expect(objects).To(HaveLen(3))
 	})
 
-	t.Run("should propagate credentials function errors", func(t *testing.T) {
+	t.Run("should not call credentials for local chart paths", func(t *testing.T) {
 		g := NewWithT(t)
-		errorCreds := func(_ context.Context) (*helm.Credentials, error) {
+		errorCreds := func(_ context.Context) (*locator.Credentials, error) {
 			return nil, context.DeadlineExceeded
 		}
 
@@ -1163,9 +1158,11 @@ func TestCredentials(t *testing.T) {
 		})
 		g.Expect(err).ToNot(HaveOccurred())
 
-		_, err = renderer.Process(t.Context(), nil)
-		g.Expect(err).To(HaveOccurred())
-		g.Expect(err.Error()).To(ContainSubstring("failed to get credentials"))
+		// Credentials are not resolved for local chart paths, so this succeeds
+		// even though the credentials function would return an error.
+		objects, err := renderer.Process(t.Context(), nil)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(objects).To(HaveLen(3))
 	})
 }
 
@@ -1370,13 +1367,12 @@ data:
 		g.Expect(errMsg).To(ContainSubstring("error-values-test"))
 	})
 
-	t.Run("should wrap Credentials function errors with context", func(t *testing.T) {
+	t.Run("should not resolve credentials for local chart paths", func(t *testing.T) {
 		t.Parallel()
 		g := NewWithT(t)
 
-		customErr := errors.New("authentication service unavailable")
-		errorCredsFunc := func(_ context.Context) (*helm.Credentials, error) {
-			return nil, customErr
+		errorCredsFunc := func(_ context.Context) (*locator.Credentials, error) {
+			return nil, errors.New("authentication service unavailable")
 		}
 
 		renderer, err := helm.New([]helm.Source{
@@ -1388,15 +1384,9 @@ data:
 		})
 		g.Expect(err).ToNot(HaveOccurred())
 
-		_, err = renderer.Process(t.Context(), nil)
-		g.Expect(err).To(HaveOccurred())
-
-		// Verify error chain includes original error
-		g.Expect(errors.Is(err, customErr)).To(BeTrue(), "Error chain should include original error")
-
-		// Verify error message includes context
-		errMsg := err.Error()
-		g.Expect(errMsg).To(ContainSubstring("failed to get credentials"))
-		g.Expect(errMsg).To(ContainSubstring("error-creds-test"))
+		// Local chart paths skip credential resolution entirely.
+		objects, err := renderer.Process(t.Context(), nil)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(objects).To(HaveLen(3))
 	})
 }

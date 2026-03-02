@@ -8,8 +8,8 @@ import (
 	"helm.sh/helm/v4/pkg/chart/common"
 	commonutil "helm.sh/helm/v4/pkg/chart/common/util"
 	chartutil "helm.sh/helm/v4/pkg/chart/v2/util"
-	"helm.sh/helm/v4/pkg/cli"
 	"helm.sh/helm/v4/pkg/engine"
+	"helm.sh/helm/v4/pkg/helmpath"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
@@ -17,18 +17,10 @@ import (
 	"github.com/k8s-manifest-kit/engine/pkg/types"
 	"github.com/k8s-manifest-kit/pkg/util/cache"
 	"github.com/k8s-manifest-kit/pkg/util/maps"
+	"github.com/k8s-manifest-kit/renderer-helm/pkg/locator"
 )
 
 const rendererType = "helm"
-
-// Credentials holds authentication credentials for accessing Helm repositories and registries.
-type Credentials struct {
-	// Username for basic authentication
-	Username string
-
-	// Password for basic authentication
-	Password string //nolint:gosec // not a hardcoded credential, just a field name
-}
 
 // Source defines a Helm chart source for rendering.
 type Source struct {
@@ -54,7 +46,7 @@ type Source struct {
 	// Credentials provides authentication credentials for accessing the chart.
 	// Function is called during chart loading to obtain credentials dynamically.
 	// Optional; only needed for authenticated registries/repositories.
-	Credentials func(context.Context) (*Credentials, error)
+	Credentials func(context.Context) (*locator.Credentials, error)
 
 	// ProcessDependencies determines whether chart dependencies should be processed.
 	// If true, chartutil.ProcessDependencies will be called during rendering.
@@ -78,7 +70,6 @@ type SourceSelector = func(ctx context.Context, source Source) (bool, error)
 // may call Process() concurrently on the same Renderer instance. Chart loading
 // is protected by per-Source mutexes to ensure thread-safe lazy initialization.
 type Renderer struct {
-	settings   *cli.EnvSettings
 	sources    []*sourceHolder
 	helmEngine engine.Engine
 	opts       RendererOptions
@@ -88,19 +79,16 @@ type Renderer struct {
 // New creates a new Helm Renderer with the given inputs and options.
 func New(inputs []Source, opts ...RendererOption) (*Renderer, error) {
 	rendererOpts := RendererOptions{
-		Filters:      make([]types.Filter, 0),
-		Transformers: make([]types.Transformer, 0),
-		ContentHash:  true,
+		Filters:          make([]types.Filter, 0),
+		Transformers:     make([]types.Transformer, 0),
+		ContentHash:      true,
+		RepositoryConfig: helmpath.ConfigPath("repositories.yaml"),
+		RepositoryCache:  helmpath.CachePath("repository"),
+		ContentCache:     helmpath.CachePath("content"),
 	}
 
-	// Apply options
 	for _, opt := range opts {
 		opt.ApplyTo(&rendererOpts)
-	}
-
-	settings := rendererOpts.Settings
-	if settings == nil {
-		settings = cli.New()
 	}
 
 	holders := make([]*sourceHolder, len(inputs))
@@ -115,8 +103,7 @@ func New(inputs []Source, opts ...RendererOption) (*Renderer, error) {
 	}
 
 	r := &Renderer{
-		settings: settings,
-		sources:  holders,
+		sources: holders,
 		helmEngine: engine.Engine{
 			LintMode: rendererOpts.LintMode,
 			Strict:   rendererOpts.Strict,
@@ -274,7 +261,7 @@ func (r *Renderer) processSingle(
 	renderTimeValues types.Values,
 ) ([]unstructured.Unstructured, error) {
 	// Load chart if not already loaded (thread-safe lazy loading)
-	chart, err := holder.LoadChart(ctx, r.settings)
+	chart, err := holder.LoadChart(ctx, r.opts.RepositoryCache)
 	if err != nil {
 		return nil, err
 	}

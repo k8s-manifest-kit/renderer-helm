@@ -106,10 +106,10 @@ return fmt.Errorf("failed to render chart %q (release %q): %w", holder.Chart, ho
 3. **Interface-Based Abstractions**
 - `cache.Interface`: Bring your own cache with metrics/observability
 - `types.Filter` and `types.Transformer`: Inject custom processing
-- `cli.EnvSettings`: Customize Helm environment configuration
+- `WithRepositoryConfig()`, `WithRepositoryCache()`, `WithContentCache()`: Customize Helm paths
 
 4. **Functional Options Pattern**
-- `WithCache()`, `WithSettings()`, `WithFilters()`, etc.
+- `WithCache()`, `WithRepositoryCache()`, `WithFilters()`, etc.
 - Flexible configuration without breaking API compatibility
 - Optional features remain optional
 
@@ -249,16 +249,15 @@ metadata:
 
 ### 8. Helm Environment Integration
 
-The renderer integrates with Helm's native configuration:
+The renderer accepts explicit infrastructure paths via functional options:
 
 ```go
-WithSettings(&cli.EnvSettings{
-    RepositoryCache: "/custom/cache",
-    // ... other settings
-})
+WithRepositoryCache("/custom/cache")
+WithRepositoryConfig("/custom/repositories.yaml")
+WithContentCache("/custom/content")
 ```
 
-**Rationale**: Allows users to customize Helm behavior (caching, timeouts, registry auth) using Helm's standard configuration.
+**Rationale**: Allows users to customize Helm repository and cache locations without depending on Helm's `cli.EnvSettings` or environment variable resolution.
 
 ## Rendering Pipeline
 

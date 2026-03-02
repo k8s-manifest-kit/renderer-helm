@@ -116,7 +116,9 @@ type RendererOptions struct {
     Filters      []types.Filter
     Transformers []types.Transformer
     Cache        cache.Cache
-    Settings     *cli.EnvSettings
+    RepositoryConfig string
+    RepositoryCache  string
+    ContentCache     string
 }
 
 // Constructor
@@ -343,9 +345,7 @@ Source{
 
 **Leverage Helm's cache**:
 ```go
-WithSettings(&cli.EnvSettings{
-    RepositoryCache: "/persistent/cache/dir",
-})
+WithRepositoryCache("/persistent/cache/dir")
 ```
 
 ## Contributing Guidelines
@@ -413,13 +413,13 @@ Each level can override previous levels completely or merge deeply depending on 
 
 ### OCI Registry Authentication
 
-OCI registries may require authentication:
+OCI registries may require authentication via the `Credentials` field on `Source`:
 ```go
-// Use Helm's standard credential storage
-settings := cli.New()
-settings.RegistryConfig = "/path/to/registry-config.json"
-
-renderer := helm.New(sources, helm.WithSettings(settings))
+helm.Source{
+    Chart:       "oci://registry/chart",
+    ReleaseName: "my-release",
+    Credentials: helm.StaticCredentials("user", "pass"),
+}
 ```
 
 ## Resources
