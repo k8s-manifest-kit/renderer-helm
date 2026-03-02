@@ -166,8 +166,8 @@ if err != nil {
 - `pkg/helm_test.go` - Comprehensive tests
 - `pkg/engine.go` - Convenience `NewEngine()` function
 - `pkg/engine_test.go` - `NewEngine()` tests
-- `docs/design.md` - Architecture and design decisions
-- `docs/development.md` - Development guidelines
+- @docs/design.md - Architecture and design decisions
+- @docs/development.md - Development guidelines
 
 ## Important Considerations
 
@@ -301,6 +301,6 @@ Source{
 - [Helm SDK Docs](https://helm.sh/docs/topics/advanced/)
 - [Engine Pkg](https://github.com/k8s-manifest-kit/engine)
 - [Pkg Utilities](https://github.com/k8s-manifest-kit/pkg)
-- [Design Doc](docs/design.md)
-- [Development Guide](docs/development.md)
+- @docs/design.md
+- @docs/development.md
 
