@@ -53,6 +53,13 @@ bench:
 deps:
 	go mod tidy
 
+.PHONY: deps/update
+deps/update:
+	@for mod in $$(grep 'github.com/k8s-manifest-kit/' go.mod | grep -v module | awk '{print $$1}'); do \
+		go get $$mod@main; \
+	done
+	go mod tidy
+
 .PHONY: lint
 lint:
 	@$(GOLANGCI) run --config .golangci.yml --timeout $(LINT_TIMEOUT)
