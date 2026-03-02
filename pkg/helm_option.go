@@ -23,7 +23,7 @@ type RendererOptions struct {
 	PostRenderers []types.PostRenderer
 
 	// SourceSelectors are renderer-specific source selectors evaluated before rendering each source.
-	SourceSelectors []types.SourceSelector
+	SourceSelectors []SourceSelector
 
 	// Settings customizes the Helm environment configuration.
 	// Nil means use default settings.
@@ -97,8 +97,7 @@ func WithPostRenderer(p types.PostRenderer) RendererOption {
 // WithSourceSelector adds a source selector to this Helm renderer.
 // Source selectors are evaluated before rendering each source. If any selector
 // returns false, the source is skipped entirely.
-// Use source.Selector[helm.Source] to build type-safe selectors.
-func WithSourceSelector(s types.SourceSelector) RendererOption {
+func WithSourceSelector(s SourceSelector) RendererOption {
 	return util.FunctionalOption[RendererOptions](func(opts *RendererOptions) {
 		opts.SourceSelectors = append(opts.SourceSelectors, s)
 	})
