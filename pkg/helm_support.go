@@ -139,7 +139,7 @@ func (h *sourceHolder) LoadChart(
 		return nil, fmt.Errorf("context cancelled during chart load: %w", err)
 	}
 
-	path, err := locator.Locate(ctx, &locator.Request{
+	result, err := locator.Locate(ctx, &locator.Request{
 		Name:            h.Chart,
 		RepoURL:         h.Repo,
 		Version:         h.ReleaseVersion,
@@ -156,7 +156,7 @@ func (h *sourceHolder) LoadChart(
 		)
 	}
 
-	c, err := loader.Load(path)
+	c, err := loader.Load(result.Path)
 	if err != nil {
 		return nil, fmt.Errorf(
 			"failed to load chart (repo: %s, name: %s, version: %s): %w",

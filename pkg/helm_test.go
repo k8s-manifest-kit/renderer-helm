@@ -1390,3 +1390,115 @@ data:
 		g.Expect(objects).To(HaveLen(3))
 	})
 }
+
+func TestRendererRemoteSources(t *testing.T) {
+	t.Parallel()
+
+	t.Run("should render chart from OCI registry with correct content", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		renderer, err := helm.New(
+			[]helm.Source{{
+				Chart:          "oci://registry-1.docker.io/bitnamicharts/nginx",
+				ReleaseName:    xid.New().String(),
+				ReleaseVersion: "18.1.0",
+			}},
+			helm.WithRepositoryCache(t.TempDir()),
+		)
+		g.Expect(err).ToNot(HaveOccurred())
+
+		objects, err := renderer.Process(t.Context(), nil)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(objects).ToNot(BeEmpty())
+
+		var deploymentFound bool
+
+		for _, obj := range objects {
+			gvk := obj.GroupVersionKind()
+			if gvk.Group == appsv1.GroupName && gvk.Kind == "Deployment" {
+				lbls := obj.GetLabels()
+				if lbls["app.kubernetes.io/name"] == "nginx" {
+					deploymentFound = true
+
+					break
+				}
+			}
+		}
+
+		g.Expect(deploymentFound).To(BeTrue(), "expected at least one Deployment with app.kubernetes.io/name=nginx")
+	})
+
+	t.Run("should render chart from Helm repository with correct content", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		renderer, err := helm.New(
+			[]helm.Source{{
+				Repo:           "https://charts.bitnami.com/bitnami",
+				Chart:          "nginx",
+				ReleaseName:    xid.New().String(),
+				ReleaseVersion: "18.1.0",
+			}},
+			helm.WithRepositoryCache(t.TempDir()),
+		)
+		g.Expect(err).ToNot(HaveOccurred())
+
+		objects, err := renderer.Process(t.Context(), nil)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(objects).ToNot(BeEmpty())
+
+		var deploymentFound bool
+
+		for _, obj := range objects {
+			gvk := obj.GroupVersionKind()
+			if gvk.Group == appsv1.GroupName && gvk.Kind == "Deployment" {
+				lbls := obj.GetLabels()
+				if lbls["app.kubernetes.io/name"] == "nginx" {
+					deploymentFound = true
+
+					break
+				}
+			}
+		}
+
+		g.Expect(deploymentFound).To(BeTrue(), "expected at least one Deployment with app.kubernetes.io/name=nginx")
+	})
+
+	t.Run("OCI and Repo should produce identical resource sets for same chart version", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		releaseName := xid.New().String()
+
+		ociRenderer, err := helm.New(
+			[]helm.Source{{
+				Chart:          "oci://registry-1.docker.io/bitnamicharts/nginx",
+				ReleaseName:    releaseName,
+				ReleaseVersion: "18.1.0",
+			}},
+			helm.WithRepositoryCache(t.TempDir()),
+		)
+		g.Expect(err).ToNot(HaveOccurred())
+
+		repoRenderer, err := helm.New(
+			[]helm.Source{{
+				Repo:           "https://charts.bitnami.com/bitnami",
+				Chart:          "nginx",
+				ReleaseName:    releaseName,
+				ReleaseVersion: "18.1.0",
+			}},
+			helm.WithRepositoryCache(t.TempDir()),
+		)
+		g.Expect(err).ToNot(HaveOccurred())
+
+		ociObjects, err := ociRenderer.Process(t.Context(), nil)
+		g.Expect(err).ToNot(HaveOccurred())
+
+		repoObjects, err := repoRenderer.Process(t.Context(), nil)
+		g.Expect(err).ToNot(HaveOccurred())
+
+		g.Expect(ociObjects).To(HaveLen(len(repoObjects)),
+			"OCI and Repo should produce the same number of resources for the same chart version")
+	})
+}
