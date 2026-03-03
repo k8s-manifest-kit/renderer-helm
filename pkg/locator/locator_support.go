@@ -26,6 +26,9 @@ const (
 	dialTimeout         = 10 * time.Second
 	tlsHandshakeTimeout = 10 * time.Second
 	responseTimeout     = 30 * time.Second
+
+	maxHTTPResponseSize = 256 << 20 // 256 MiB
+	maxChartYAMLSize    = 1 << 20   // 1 MiB
 )
 
 var (
@@ -37,6 +40,12 @@ var (
 
 	// ErrNoValidSemverTag is returned when none of the registry tags are valid semver.
 	ErrNoValidSemverTag = errors.New("no valid semver tag found")
+
+	// ErrResponseTooLarge is returned when an HTTP response body exceeds the size limit.
+	ErrResponseTooLarge = errors.New("HTTP response body too large")
+
+	// ErrChartYAMLTooLarge is returned when a Chart.yaml entry in a tar archive exceeds the size limit.
+	ErrChartYAMLTooLarge = errors.New("chart.yaml too large")
 )
 
 func newHTTPClient() *http.Client {
@@ -71,7 +80,7 @@ func effectivePort(u *url.URL) string {
 	}
 }
 
-func httpGet(ctx context.Context, rawURL string, creds *Credentials) ([]byte, error) {
+func httpGet(ctx context.Context, client *http.Client, rawURL string, creds *Credentials) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create HTTP request: %w", err)
@@ -81,7 +90,11 @@ func httpGet(ctx context.Context, rawURL string, creds *Credentials) ([]byte, er
 		req.SetBasicAuth(creds.Username, creds.Password)
 	}
 
-	resp, err := newHTTPClient().Do(req) //nolint:gosec // URL is constructed from user-provided repo config
+	if client == nil {
+		client = newHTTPClient()
+	}
+
+	resp, err := client.Do(req) //nolint:gosec // URL is constructed from user-provided repo config
 	if err != nil {
 		return nil, fmt.Errorf("HTTP request failed: %w", err)
 	}
@@ -91,9 +104,13 @@ func httpGet(ctx context.Context, rawURL string, creds *Credentials) ([]byte, er
 		return nil, fmt.Errorf("%w: %d from %s", ErrUnexpectedStatus, resp.StatusCode, rawURL)
 	}
 
-	data, err := io.ReadAll(resp.Body)
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxHTTPResponseSize+1))
 	if err != nil {
 		return nil, fmt.Errorf("unable to read HTTP response body: %w", err)
+	}
+
+	if int64(len(data)) > maxHTTPResponseSize {
+		return nil, fmt.Errorf("%w: %d bytes from %s", ErrResponseTooLarge, len(data), rawURL)
 	}
 
 	return data, nil
@@ -133,9 +150,13 @@ func ExtractChartMeta(path string) (chart.Metadata, error) {
 			continue
 		}
 
-		data, err := io.ReadAll(tr)
+		data, err := io.ReadAll(io.LimitReader(tr, maxChartYAMLSize+1))
 		if err != nil {
 			return chart.Metadata{}, fmt.Errorf("unable to read %q from archive: %w", name, err)
+		}
+
+		if int64(len(data)) > maxChartYAMLSize {
+			return chart.Metadata{}, fmt.Errorf("%w: %q", ErrChartYAMLTooLarge, name)
 		}
 
 		if best == "" || len(name) < len(best) {

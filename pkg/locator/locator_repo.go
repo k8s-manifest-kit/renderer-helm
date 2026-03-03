@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -23,45 +24,46 @@ type Repo struct {
 	Version     string
 	Credentials *Credentials
 	CacheDir    string
+	HTTPClient  *http.Client
 }
 
 // Locate downloads the chart from a Helm repository and returns the local cache path.
-func (r *Repo) Locate(ctx context.Context) (string, error) {
+func (r *Repo) Locate(ctx context.Context) (Result, error) {
 	if err := os.MkdirAll(r.CacheDir, dirPermissions); err != nil {
-		return "", fmt.Errorf("unable to create repository cache directory: %w", err)
+		return Result{}, fmt.Errorf("unable to create repository cache directory: %w", err)
 	}
 
 	chartURL, err := r.resolveChartURL(ctx)
 	if err != nil {
-		return "", err
+		return Result{}, err
 	}
 
 	creds := r.downloadCredentials(chartURL)
 
-	data, err := httpGet(ctx, chartURL, creds)
+	data, err := httpGet(ctx, r.HTTPClient, chartURL, creds)
 	if err != nil {
-		return "", fmt.Errorf("unable to download chart: %w", err)
+		return Result{}, fmt.Errorf("unable to download chart: %w", err)
 	}
 
 	hash := sha256.Sum256(data)
 	filename := filepath.Join(r.CacheDir, fmt.Sprintf("%x.tgz", hash))
 
 	if err := os.WriteFile(filename, data, filePermissions); err != nil {
-		return "", fmt.Errorf("unable to write chart to cache: %w", err)
+		return Result{}, fmt.Errorf("unable to write chart to cache: %w", err)
 	}
 
 	abs, err := filepath.Abs(filename)
 	if err != nil {
-		return "", fmt.Errorf("unable to resolve absolute path for %q: %w", filename, err)
+		return Result{}, fmt.Errorf("unable to resolve absolute path for %q: %w", filename, err)
 	}
 
-	return abs, nil
+	return Result{Path: abs, SourceType: SourceRepo}, nil
 }
 
 func (r *Repo) resolveChartURL(ctx context.Context) (string, error) {
 	indexURL := strings.TrimSuffix(r.RepoURL, "/") + "/index.yaml"
 
-	data, err := httpGet(ctx, indexURL, r.Credentials)
+	data, err := httpGet(ctx, r.HTTPClient, indexURL, r.Credentials)
 	if err != nil {
 		return "", fmt.Errorf("unable to fetch repository index from %q: %w", indexURL, err)
 	}

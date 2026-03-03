@@ -7,8 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-
-	"helm.sh/helm/v4/pkg/registry"
 )
 
 var (
@@ -26,7 +24,7 @@ const (
 
 // Locator resolves a chart reference to a local filesystem path.
 type Locator interface {
-	Locate(ctx context.Context) (string, error)
+	Locate(ctx context.Context) (Result, error)
 }
 
 // Credentials holds authentication credentials for accessing Helm repositories and registries.
@@ -73,22 +71,22 @@ func (r *Request) resolveCredentials(ctx context.Context) (*Credentials, error) 
 //  1. When no RepoURL is set, check if Name is a local path.
 //  2. If the path is absolute or starts with '.', error when it does not exist.
 //  3. Otherwise download via the appropriate locator (Repo or OCI).
-func Locate(ctx context.Context, req *Request) (string, error) {
+func Locate(ctx context.Context, req *Request) (Result, error) {
 	if req == nil {
-		return "", ErrNilRequest
+		return Result{}, ErrNilRequest
 	}
 
 	l, err := newLocator(ctx, req)
 	if err != nil {
-		return "", err
+		return Result{}, err
 	}
 
-	path, err := l.Locate(ctx)
+	result, err := l.Locate(ctx)
 	if err != nil {
-		return "", fmt.Errorf("locate: %w", err)
+		return Result{}, fmt.Errorf("failed to locate chart %q: %w", req.Name, err)
 	}
 
-	return path, nil
+	return result, nil
 }
 
 func newLocator(ctx context.Context, req *Request) (Locator, error) {
@@ -110,7 +108,7 @@ func newLocator(ctx context.Context, req *Request) (Locator, error) {
 		return nil, err
 	}
 
-	if registry.IsOCI(name) {
+	if isOCI(name) {
 		return &OCI{
 			Ref:         name,
 			Version:     version,
@@ -136,15 +134,19 @@ type Local struct {
 
 // Locate returns the absolute path to a local chart, or an error if MustExist
 // is set and the path was not found.
-func (l *Local) Locate(_ context.Context) (string, error) {
+func (l *Local) Locate(_ context.Context) (Result, error) {
 	if l.MustExist {
-		return l.Name, fmt.Errorf("%w: %s", ErrPathNotFound, l.Name)
+		return Result{}, fmt.Errorf("%w: %s", ErrPathNotFound, l.Name)
 	}
 
 	abs, err := filepath.Abs(l.Name)
 	if err != nil {
-		return "", fmt.Errorf("unable to resolve absolute path for %q: %w", l.Name, err)
+		return Result{}, fmt.Errorf("unable to resolve absolute path for %q: %w", l.Name, err)
 	}
 
-	return abs, nil
+	return Result{Path: abs, SourceType: SourceLocal}, nil
+}
+
+func isOCI(ref string) bool {
+	return strings.HasPrefix(ref, "oci://")
 }

@@ -16,6 +16,10 @@ var (
 
 // Minimal structs for parsing a Helm repository index.yaml without importing
 // the repo/v1 package (which transitively pulls in controller-runtime).
+//
+// These use json struct tags because sigs.k8s.io/yaml (used for unmarshaling)
+// converts YAML to JSON internally and then uses encoding/json, so only json
+// tags are honored.
 
 type repoIndex struct {
 	Entries map[string]repoChartVersions `json:"entries"`

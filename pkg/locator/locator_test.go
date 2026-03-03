@@ -14,6 +14,7 @@ import (
 	"github.com/k8s-manifest-kit/renderer-helm/pkg/locator"
 
 	. "github.com/onsi/gomega"
+	. "github.com/onsi/gomega/gstruct"
 )
 
 const (
@@ -62,11 +63,14 @@ func TestLocate(t *testing.T) {
 		chartDir := filepath.Join(t.TempDir(), "mychart")
 		g.Expect(os.MkdirAll(chartDir, 0750)).To(Succeed())
 
-		path, err := locator.Locate(t.Context(), &locator.Request{Name: chartDir})
+		result, err := locator.Locate(t.Context(), &locator.Request{Name: chartDir})
 		g.Expect(err).ToNot(HaveOccurred())
 
 		absExpected, _ := filepath.Abs(chartDir)
-		g.Expect(path).To(Equal(absExpected))
+		g.Expect(result).To(MatchFields(IgnoreExtras, Fields{
+			"Path":       Equal(absExpected),
+			"SourceType": Equal(locator.SourceLocal),
+		}))
 	})
 
 	t.Run("should resolve existing local file", func(t *testing.T) {
@@ -76,11 +80,11 @@ func TestLocate(t *testing.T) {
 		tmpFile := filepath.Join(t.TempDir(), "mychart.tgz")
 		g.Expect(os.WriteFile(tmpFile, []byte("fake-chart"), 0600)).To(Succeed())
 
-		path, err := locator.Locate(t.Context(), &locator.Request{Name: tmpFile})
+		result, err := locator.Locate(t.Context(), &locator.Request{Name: tmpFile})
 		g.Expect(err).ToNot(HaveOccurred())
 
 		absExpected, _ := filepath.Abs(tmpFile)
-		g.Expect(path).To(Equal(absExpected))
+		g.Expect(result.Path).To(Equal(absExpected))
 	})
 
 	t.Run("should error for nonexistent absolute path", func(t *testing.T) {
@@ -108,11 +112,11 @@ func TestLocate(t *testing.T) {
 		chartDir := filepath.Join(t.TempDir(), "mychart")
 		g.Expect(os.MkdirAll(chartDir, 0750)).To(Succeed())
 
-		path, err := locator.Locate(t.Context(), &locator.Request{Name: "  " + chartDir + "  "})
+		result, err := locator.Locate(t.Context(), &locator.Request{Name: "  " + chartDir + "  "})
 		g.Expect(err).ToNot(HaveOccurred())
 
 		absExpected, _ := filepath.Abs(chartDir)
-		g.Expect(path).To(Equal(absExpected))
+		g.Expect(result.Path).To(Equal(absExpected))
 	})
 
 	t.Run("should skip local resolution when RepoURL is set", func(t *testing.T) {
@@ -149,6 +153,23 @@ func TestLocate(t *testing.T) {
 		g.Expect(errors.Is(err, credErr)).To(BeTrue())
 	})
 
+	t.Run("should propagate credential errors for OCI charts", func(t *testing.T) {
+		t.Parallel()
+		g := NewWithT(t)
+
+		credErr := errors.New("vault unavailable")
+
+		_, err := locator.Locate(t.Context(), &locator.Request{
+			Name:            "oci://registry-1.docker.io/bitnamicharts/nginx",
+			RepositoryCache: t.TempDir(),
+			Credentials: func(_ context.Context) (*locator.Credentials, error) {
+				return nil, credErr
+			},
+		})
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(errors.Is(err, credErr)).To(BeTrue())
+	})
+
 	t.Run("should handle nil credential return", func(t *testing.T) {
 		t.Parallel()
 		g := NewWithT(t)
@@ -156,7 +177,7 @@ func TestLocate(t *testing.T) {
 		chartDir := filepath.Join(t.TempDir(), "mychart")
 		g.Expect(os.MkdirAll(chartDir, 0750)).To(Succeed())
 
-		path, err := locator.Locate(t.Context(), &locator.Request{
+		result, err := locator.Locate(t.Context(), &locator.Request{
 			Name: chartDir,
 			Credentials: func(_ context.Context) (*locator.Credentials, error) {
 				return nil, nil //nolint:nilnil // testing nil credential response
@@ -165,7 +186,7 @@ func TestLocate(t *testing.T) {
 		g.Expect(err).ToNot(HaveOccurred())
 
 		absExpected, _ := filepath.Abs(chartDir)
-		g.Expect(path).To(Equal(absExpected))
+		g.Expect(result.Path).To(Equal(absExpected))
 	})
 
 	t.Run("should not call credentials for local paths", func(t *testing.T) {
@@ -176,7 +197,7 @@ func TestLocate(t *testing.T) {
 		g.Expect(os.MkdirAll(chartDir, 0750)).To(Succeed())
 
 		called := false
-		path, err := locator.Locate(t.Context(), &locator.Request{
+		result, err := locator.Locate(t.Context(), &locator.Request{
 			Name: chartDir,
 			Credentials: func(_ context.Context) (*locator.Credentials, error) {
 				called = true
@@ -188,7 +209,7 @@ func TestLocate(t *testing.T) {
 		g.Expect(called).To(BeFalse())
 
 		absExpected, _ := filepath.Abs(chartDir)
-		g.Expect(path).To(Equal(absExpected))
+		g.Expect(result.Path).To(Equal(absExpected))
 	})
 }
 
@@ -200,16 +221,19 @@ func TestRepoLocator_Download(t *testing.T) {
 		g := NewWithT(t)
 
 		srv := newChartServer(t, "/mychart-1.2.3.tgz")
-		path, err := locator.Locate(t.Context(), &locator.Request{
+		result, err := locator.Locate(t.Context(), &locator.Request{
 			Name:            "mychart",
 			RepoURL:         srv.URL,
 			Version:         "1.2.3",
 			RepositoryCache: t.TempDir(),
 		})
 		g.Expect(err).ToNot(HaveOccurred())
-		g.Expect(path).To(BeARegularFile())
+		g.Expect(result).To(MatchFields(IgnoreExtras, Fields{
+			"Path":       BeARegularFile(),
+			"SourceType": Equal(locator.SourceRepo),
+		}))
 
-		data, err := os.ReadFile(path) //nolint:gosec // path from test
+		data, err := os.ReadFile(result.Path)
 		g.Expect(err).ToNot(HaveOccurred())
 		g.Expect(data).To(Equal([]byte(chartData)))
 	})
@@ -219,13 +243,13 @@ func TestRepoLocator_Download(t *testing.T) {
 		g := NewWithT(t)
 
 		srv := newChartServer(t, "/mychart-2.0.0.tgz")
-		path, err := locator.Locate(t.Context(), &locator.Request{
+		result, err := locator.Locate(t.Context(), &locator.Request{
 			Name:            "mychart",
 			RepoURL:         srv.URL,
 			RepositoryCache: t.TempDir(),
 		})
 		g.Expect(err).ToNot(HaveOccurred())
-		g.Expect(path).To(BeARegularFile())
+		g.Expect(result.Path).To(BeARegularFile())
 	})
 
 	t.Run("should cache downloaded chart by content hash", func(t *testing.T) {
@@ -233,7 +257,7 @@ func TestRepoLocator_Download(t *testing.T) {
 		g := NewWithT(t)
 
 		srv := newChartServer(t, "/mychart-1.0.0.tgz")
-		path, err := locator.Locate(t.Context(), &locator.Request{
+		result, err := locator.Locate(t.Context(), &locator.Request{
 			Name:            "mychart",
 			RepoURL:         srv.URL,
 			Version:         "1.0.0",
@@ -243,7 +267,7 @@ func TestRepoLocator_Download(t *testing.T) {
 
 		hash := sha256.Sum256([]byte(chartData))
 		expectedName := fmt.Sprintf("%x.tgz", hash)
-		g.Expect(filepath.Base(path)).To(Equal(expectedName))
+		g.Expect(filepath.Base(result.Path)).To(Equal(expectedName))
 	})
 
 	t.Run("should support semver constraint versions", func(t *testing.T) {
@@ -251,14 +275,14 @@ func TestRepoLocator_Download(t *testing.T) {
 		g := NewWithT(t)
 
 		srv := newChartServer(t, "/mychart-1.2.3.tgz")
-		path, err := locator.Locate(t.Context(), &locator.Request{
+		result, err := locator.Locate(t.Context(), &locator.Request{
 			Name:            "mychart",
 			RepoURL:         srv.URL,
 			Version:         "^1.0.0",
 			RepositoryCache: t.TempDir(),
 		})
 		g.Expect(err).ToNot(HaveOccurred())
-		g.Expect(path).To(BeARegularFile())
+		g.Expect(result.Path).To(BeARegularFile())
 	})
 
 	t.Run("should error when chart not found in index", func(t *testing.T) {
