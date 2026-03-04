@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io"
@@ -12,11 +13,9 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 
-	"github.com/Masterminds/semver/v3"
 	chart "helm.sh/helm/v4/pkg/chart/v2"
 	"sigs.k8s.io/yaml"
 )
@@ -37,9 +36,6 @@ var (
 
 	// ErrNoChartYAML is returned when a chart archive does not contain a Chart.yaml.
 	ErrNoChartYAML = errors.New("archive does not contain a Chart.yaml")
-
-	// ErrNoValidSemverTag is returned when none of the registry tags are valid semver.
-	ErrNoValidSemverTag = errors.New("no valid semver tag found")
 
 	// ErrResponseTooLarge is returned when an HTTP response body exceeds the size limit.
 	ErrResponseTooLarge = errors.New("HTTP response body too large")
@@ -159,7 +155,7 @@ func ExtractChartMeta(path string) (chart.Metadata, error) {
 			return chart.Metadata{}, fmt.Errorf("%w: %q", ErrChartYAMLTooLarge, name)
 		}
 
-		if best == "" || len(name) < len(best) {
+		if best == "" || strings.Count(name, "/") < strings.Count(best, "/") {
 			best = name
 			bestData = data
 		}
@@ -177,25 +173,26 @@ func ExtractChartMeta(path string) (chart.Metadata, error) {
 	return meta, nil
 }
 
-// latestSemver parses all valid semver tags, sorts them descending,
-// and returns the highest. Non-semver tags are silently skipped.
-func latestSemver(tags []string) (*semver.Version, error) {
-	versions := make([]*semver.Version, 0, len(tags))
-
-	for _, t := range tags {
-		v, err := semver.NewVersion(t)
-		if err != nil {
-			continue
-		}
-
-		versions = append(versions, v)
+func cacheChart(cacheDir string, data []byte) (string, error) {
+	if cacheDir == "" {
+		return "", ErrEmptyCacheDir
 	}
 
-	if len(versions) == 0 {
-		return nil, ErrNoValidSemverTag
+	if err := os.MkdirAll(cacheDir, dirPermissions); err != nil {
+		return "", fmt.Errorf("unable to create cache directory: %w", err)
 	}
 
-	sort.Sort(sort.Reverse(semver.Collection(versions)))
+	hash := sha256.Sum256(data)
+	filename := filepath.Join(cacheDir, fmt.Sprintf("%x.tgz", hash))
 
-	return versions[0], nil
+	if err := os.WriteFile(filename, data, filePermissions); err != nil {
+		return "", fmt.Errorf("unable to write chart to cache: %w", err)
+	}
+
+	abs, err := filepath.Abs(filename)
+	if err != nil {
+		return "", fmt.Errorf("unable to resolve absolute path for %q: %w", filename, err)
+	}
+
+	return abs, nil
 }
