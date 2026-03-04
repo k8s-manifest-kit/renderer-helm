@@ -3,6 +3,7 @@ package helm_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -11,6 +12,7 @@ import (
 	"github.com/rs/xid"
 
 	appsv1 "k8s.io/api/apps/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	"github.com/k8s-manifest-kit/engine/pkg/filter/meta/gvk"
 	"github.com/k8s-manifest-kit/engine/pkg/transformer/meta/labels"
@@ -1500,5 +1502,23 @@ func TestRendererRemoteSources(t *testing.T) {
 
 		g.Expect(ociObjects).To(HaveLen(len(repoObjects)),
 			"OCI and Repo should produce the same number of resources for the same chart version")
+
+		ociIDs := objectIdentities(ociObjects)
+		repoIDs := objectIdentities(repoObjects)
+
+		g.Expect(ociIDs).To(ConsistOf(repoIDs),
+			"OCI and Repo should produce the same resource identities (GVK + namespace/name)")
 	})
+}
+
+func objectIdentities(objects []unstructured.Unstructured) []string {
+	ids := make([]string, 0, len(objects))
+	for _, obj := range objects {
+		objGVK := obj.GroupVersionKind()
+		ids = append(ids, fmt.Sprintf("%s/%s/%s/%s/%s",
+			objGVK.Group, objGVK.Version, objGVK.Kind,
+			obj.GetNamespace(), obj.GetName()))
+	}
+
+	return ids
 }

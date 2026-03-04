@@ -2,20 +2,22 @@ package locator
 
 import (
 	"context"
-	"crypto/sha256"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
-	"os"
-	"path/filepath"
 	"strings"
 
 	"sigs.k8s.io/yaml"
 )
 
-// ErrNoDownloadURLs is returned when a resolved chart version has no download URLs.
-var ErrNoDownloadURLs = errors.New("chart version has no download URLs")
+var (
+	// ErrNoDownloadURLs is returned when a resolved chart version has no download URLs.
+	ErrNoDownloadURLs = errors.New("chart version has no download URLs")
+
+	// ErrEmptyRepoURL is returned when a Repo locator is created without a repository URL.
+	ErrEmptyRepoURL = errors.New("repository URL must not be empty")
+)
 
 // Repo resolves charts hosted in a classic Helm HTTP/HTTPS repository.
 type Repo struct {
@@ -29,8 +31,12 @@ type Repo struct {
 
 // Locate downloads the chart from a Helm repository and returns the local cache path.
 func (r *Repo) Locate(ctx context.Context) (Result, error) {
-	if err := os.MkdirAll(r.CacheDir, dirPermissions); err != nil {
-		return Result{}, fmt.Errorf("unable to create repository cache directory: %w", err)
+	if r.RepoURL == "" {
+		return Result{}, ErrEmptyRepoURL
+	}
+
+	if r.CacheDir == "" {
+		return Result{}, ErrEmptyCacheDir
 	}
 
 	chartURL, err := r.resolveChartURL(ctx)
@@ -38,26 +44,22 @@ func (r *Repo) Locate(ctx context.Context) (Result, error) {
 		return Result{}, err
 	}
 
-	creds := r.downloadCredentials(chartURL)
+	creds, err := r.downloadCredentials(chartURL)
+	if err != nil {
+		return Result{}, err
+	}
 
 	data, err := httpGet(ctx, r.HTTPClient, chartURL, creds)
 	if err != nil {
 		return Result{}, fmt.Errorf("unable to download chart: %w", err)
 	}
 
-	hash := sha256.Sum256(data)
-	filename := filepath.Join(r.CacheDir, fmt.Sprintf("%x.tgz", hash))
-
-	if err := os.WriteFile(filename, data, filePermissions); err != nil {
-		return Result{}, fmt.Errorf("unable to write chart to cache: %w", err)
-	}
-
-	abs, err := filepath.Abs(filename)
+	path, err := cacheChart(r.CacheDir, data)
 	if err != nil {
-		return Result{}, fmt.Errorf("unable to resolve absolute path for %q: %w", filename, err)
+		return Result{}, err
 	}
 
-	return Result{Path: abs, SourceType: SourceRepo}, nil
+	return Result{Path: path, SourceType: SourceRepo}, nil
 }
 
 func (r *Repo) resolveChartURL(ctx context.Context) (string, error) {
@@ -85,7 +87,12 @@ func (r *Repo) resolveChartURL(ctx context.Context) (string, error) {
 	chartURL := cv.URLs[0]
 
 	if u, err := url.Parse(chartURL); err == nil && !u.IsAbs() {
-		chartURL = strings.TrimSuffix(r.RepoURL, "/") + "/" + chartURL
+		base, parseErr := url.Parse(strings.TrimSuffix(r.RepoURL, "/") + "/")
+		if parseErr != nil {
+			return "", fmt.Errorf("unable to parse repo URL %q: %w", r.RepoURL, parseErr)
+		}
+
+		chartURL = base.ResolveReference(u).String()
 	}
 
 	return chartURL, nil
@@ -93,24 +100,24 @@ func (r *Repo) resolveChartURL(ctx context.Context) (string, error) {
 
 // downloadCredentials returns credentials for the chart download, applying
 // same-origin protection to prevent credential leakage across hosts.
-func (r *Repo) downloadCredentials(chartURL string) *Credentials {
+func (r *Repo) downloadCredentials(chartURL string) (*Credentials, error) {
 	if !r.Credentials.hasAuth() {
-		return nil
+		return nil, nil //nolint:nilnil // nil credentials means no authentication
 	}
 
 	u1, err := url.Parse(r.RepoURL)
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("unable to parse repo URL %q: %w", r.RepoURL, err)
 	}
 
 	u2, err := url.Parse(chartURL)
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("unable to parse chart URL %q: %w", chartURL, err)
 	}
 
 	if !urlsShareOrigin(u1, u2) {
-		return nil
+		return nil, nil //nolint:nilnil // different origin means no credentials
 	}
 
-	return r.Credentials
+	return r.Credentials, nil
 }

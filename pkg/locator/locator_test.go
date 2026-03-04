@@ -367,6 +367,87 @@ func TestRepoLocator_Credentials(t *testing.T) {
 	})
 }
 
+func TestRepoLocator_EmptyRepoURL(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	_, err := locator.Locate(t.Context(), &locator.Request{
+		Name:            "mychart",
+		RepoURL:         "",
+		Version:         "1.0.0",
+		RepositoryCache: t.TempDir(),
+	})
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(errors.Is(err, locator.ErrEmptyRepoURL)).To(BeTrue())
+}
+
+func TestRepoLocator_EmptyCacheDir(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	repo := &locator.Repo{
+		Name:     "mychart",
+		RepoURL:  "https://example.com",
+		CacheDir: "",
+	}
+
+	_, err := repo.Locate(t.Context())
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(errors.Is(err, locator.ErrEmptyCacheDir)).To(BeTrue())
+}
+
+func TestOCILocator_EmptyCacheDir(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	oci := &locator.OCI{
+		Ref:      "oci://registry.example.com/charts/nginx",
+		CacheDir: "",
+	}
+
+	_, err := oci.Locate(t.Context())
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(errors.Is(err, locator.ErrEmptyCacheDir)).To(BeTrue())
+}
+
+func TestRepoLocator_PathTraversal(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	const traversalIndexYAML = `apiVersion: v1
+entries:
+  mychart:
+    - version: "1.0.0"
+      urls:
+        - ../../../etc/mychart-1.0.0.tgz
+`
+
+	var requestedPath string
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case indexPath:
+			_, _ = w.Write([]byte(traversalIndexYAML))
+		default:
+			requestedPath = r.URL.Path
+			_, _ = w.Write([]byte(chartData))
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	_, err := locator.Locate(t.Context(), &locator.Request{
+		Name:            "mychart",
+		RepoURL:         srv.URL,
+		Version:         "1.0.0",
+		RepositoryCache: t.TempDir(),
+	})
+
+	// url.ResolveReference collapses "../" segments so the request stays
+	// under the server's origin rather than escaping.
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(requestedPath).To(Equal("/etc/mychart-1.0.0.tgz"))
+}
+
 func crossOriginRepoIndex(chartBaseURL string) string {
 	return fmt.Sprintf(crossOriginRepoIndexTmpl, chartBaseURL)
 }

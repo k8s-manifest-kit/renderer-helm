@@ -2,25 +2,22 @@ package locator
 
 import (
 	"context"
-	"crypto/sha256"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
-	"strings"
 
-	"github.com/distribution/reference"
+	"github.com/k8s-manifest-kit/renderer-helm/pkg/container"
 )
 
 // ErrEmptyChartData is returned when an OCI pull returns no chart content.
 var ErrEmptyChartData = errors.New("OCI pull returned empty chart data")
 
-// ErrNoTags is returned when a registry has no tags for the given reference.
-var ErrNoTags = errors.New("no tags found")
-
-// ErrRefContainsTag is returned when an OCI ref already contains an embedded
-// tag and a separate Version is also specified, which would produce an invalid reference.
-var ErrRefContainsTag = errors.New("OCI ref already contains a tag; cannot also specify Version")
+// Re-export container sentinel errors so existing locator consumers don't break.
+var (
+	ErrNoTags            = container.ErrNoTags
+	ErrRefContainsTag    = container.ErrRefContainsTag
+	ErrRefContainsDigest = container.ErrRefContainsDigest
+	ErrNoValidSemverTag  = container.ErrNoValidSemverTag
+)
 
 // OCI resolves charts stored in an OCI-compatible registry.
 type OCI struct {
@@ -28,12 +25,13 @@ type OCI struct {
 	Version     string
 	Credentials *Credentials
 	CacheDir    string
+	PlainHTTP   bool
 }
 
 // Locate pulls the chart from an OCI registry and returns the local cache path.
 func (o *OCI) Locate(ctx context.Context) (Result, error) {
-	if err := os.MkdirAll(o.CacheDir, dirPermissions); err != nil {
-		return Result{}, fmt.Errorf("unable to create repository cache directory: %w", err)
+	if o.CacheDir == "" {
+		return Result{}, ErrEmptyCacheDir
 	}
 
 	data, err := o.pull(ctx)
@@ -41,40 +39,54 @@ func (o *OCI) Locate(ctx context.Context) (Result, error) {
 		return Result{}, err
 	}
 
-	hash := sha256.Sum256(data)
-	filename := filepath.Join(o.CacheDir, fmt.Sprintf("%x.tgz", hash))
-
-	if err := os.WriteFile(filename, data, filePermissions); err != nil {
-		return Result{}, fmt.Errorf("unable to write chart to cache: %w", err)
-	}
-
-	abs, err := filepath.Abs(filename)
+	path, err := cacheChart(o.CacheDir, data)
 	if err != nil {
-		return Result{}, fmt.Errorf("unable to resolve absolute path for %q: %w", filename, err)
+		return Result{}, err
 	}
 
-	return Result{Path: abs, SourceType: SourceOCI}, nil
+	return Result{Path: path, SourceType: SourceOCI}, nil
 }
 
 func (o *OCI) pull(ctx context.Context) ([]byte, error) {
-	var opts []ClientOption
+	var opts []container.ClientOption
 	if o.Credentials.hasAuth() {
-		opts = append(opts, WithCredentials(o.Credentials))
+		opts = append(opts, container.WithCredential(o.Credentials.Username, o.Credentials.Password))
 	}
 
-	client, err := NewOCIClient(o.Ref, opts...)
+	if o.PlainHTTP {
+		opts = append(opts, container.WithPlainHTTP(true))
+	}
+
+	client, err := container.NewClient(o.Ref, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create OCI client: %w", err)
 	}
 
-	tag, err := o.resolveTag(ctx, client)
+	if dgst := container.EmbeddedDigest(o.Ref); dgst != "" {
+		if o.Version != "" {
+			return nil, fmt.Errorf("%w: ref %q has digest %q, version %q", ErrRefContainsDigest, o.Ref, dgst, o.Version)
+		}
+
+		data, err := client.PullDigest(ctx, dgst)
+		if err != nil {
+			return nil, fmt.Errorf("unable to pull chart by digest: %w", err)
+		}
+
+		if len(data) == 0 {
+			return nil, fmt.Errorf("%w: %q", ErrEmptyChartData, o.Ref)
+		}
+
+		return data, nil
+	}
+
+	tag, err := client.ResolveTag(ctx, o.Version)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unable to resolve tag: %w", err)
 	}
 
 	data, err := client.Pull(ctx, tag)
 	if err != nil {
-		return nil, fmt.Errorf("unable to pull chart from OCI registry: %w", err)
+		return nil, fmt.Errorf("unable to pull chart by tag: %w", err)
 	}
 
 	if len(data) == 0 {
@@ -82,50 +94,4 @@ func (o *OCI) pull(ctx context.Context) ([]byte, error) {
 	}
 
 	return data, nil
-}
-
-func (o *OCI) resolveTag(ctx context.Context, client *Client) (string, error) {
-	tag := o.embeddedTag()
-
-	switch {
-	case tag != "" && o.Version != "":
-		return "", fmt.Errorf("%w: ref %q has tag %q, version %q", ErrRefContainsTag, o.Ref, tag, o.Version)
-	case o.Version != "":
-		return o.Version, nil
-	case tag != "":
-		return tag, nil
-	}
-
-	tags, err := client.Tags(ctx)
-
-	switch {
-	case err != nil:
-		return "", fmt.Errorf("unable to list tags for %q: %w", o.Ref, err)
-	case len(tags) == 0:
-		return "", fmt.Errorf("%w: %q", ErrNoTags, o.Ref)
-	}
-
-	latest, err := latestSemver(tags)
-	if err != nil {
-		return "", fmt.Errorf("unable to resolve latest version for %q: %w", o.Ref, err)
-	}
-
-	return latest.Original(), nil
-}
-
-// embeddedTag extracts a tag from the OCI ref if present.
-// e.g. "oci://registry/chart:1.0" returns "1.0", "oci://registry/chart" returns "".
-// Port numbers (e.g. "localhost:5000/chart") are not mistaken for tags.
-func (o *OCI) embeddedTag() string {
-	named, err := reference.ParseNormalizedNamed(strings.TrimPrefix(o.Ref, "oci://"))
-	if err != nil {
-		return ""
-	}
-
-	tagged, ok := named.(reference.Tagged)
-	if !ok {
-		return ""
-	}
-
-	return tagged.Tag()
 }

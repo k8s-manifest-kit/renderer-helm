@@ -15,6 +15,9 @@ var (
 
 	// ErrNilRequest is returned when Locate receives a nil request.
 	ErrNilRequest = errors.New("request must not be nil")
+
+	// ErrEmptyCacheDir is returned when a locator requires a cache directory but none was provided.
+	ErrEmptyCacheDir = errors.New("cache directory must not be empty")
 )
 
 const (
@@ -108,22 +111,25 @@ func newLocator(ctx context.Context, req *Request) (Locator, error) {
 		return nil, err
 	}
 
-	if isOCI(name) {
-		return &OCI{
+	var locator Locator
+	if strings.HasPrefix(name, "oci://") {
+		locator = &OCI{
 			Ref:         name,
 			Version:     version,
 			Credentials: creds,
 			CacheDir:    req.RepositoryCache,
-		}, nil
+		}
+	} else {
+		locator = &Repo{
+			Name:        name,
+			RepoURL:     req.RepoURL,
+			Version:     version,
+			Credentials: creds,
+			CacheDir:    req.RepositoryCache,
+		}
 	}
 
-	return &Repo{
-		Name:        name,
-		RepoURL:     req.RepoURL,
-		Version:     version,
-		Credentials: creds,
-		CacheDir:    req.RepositoryCache,
-	}, nil
+	return locator, nil
 }
 
 // Local resolves chart references that point to the local filesystem.
@@ -145,8 +151,4 @@ func (l *Local) Locate(_ context.Context) (Result, error) {
 	}
 
 	return Result{Path: abs, SourceType: SourceLocal}, nil
-}
-
-func isOCI(ref string) bool {
-	return strings.HasPrefix(ref, "oci://")
 }
