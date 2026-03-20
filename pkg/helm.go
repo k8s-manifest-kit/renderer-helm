@@ -268,8 +268,7 @@ func (r *Renderer) processSingle(
 
 	renderValues, err := r.processValues(ctx, holder, renderTimeValues)
 	if err != nil {
-		// processValues already provides full context, pass through
-		return nil, err
+		return nil, &RenderError{Chart: holder.Chart, ReleaseName: holder.ReleaseName, Err: err}
 	}
 
 	spec := chartSpec{
@@ -296,7 +295,11 @@ func (r *Renderer) processSingle(
 
 	files, err := r.helmEngine.Render(chart, renderValues)
 	if err != nil {
-		return nil, fmt.Errorf("failed to render chart %q (release %q): %w", holder.Chart, holder.ReleaseName, err)
+		return nil, &RenderError{
+			Chart:       holder.Chart,
+			ReleaseName: holder.ReleaseName,
+			Err:         fmt.Errorf("failed to render chart %q (release %q): %w", holder.Chart, holder.ReleaseName, err),
+		}
 	}
 
 	result := make([]unstructured.Unstructured, 0)
@@ -305,13 +308,13 @@ func (r *Renderer) processSingle(
 	// are available if any rendered templates reference custom resources
 	crdObjects, err := r.processCRDs(chart, holder)
 	if err != nil {
-		return nil, err
+		return nil, &RenderError{Chart: holder.Chart, ReleaseName: holder.ReleaseName, Err: err}
 	}
 	result = append(result, crdObjects...)
 
 	templateObjects, err := r.processRenderedTemplates(files, holder)
 	if err != nil {
-		return nil, err
+		return nil, &RenderError{Chart: holder.Chart, ReleaseName: holder.ReleaseName, Err: err}
 	}
 	result = append(result, templateObjects...)
 

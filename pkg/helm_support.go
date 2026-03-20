@@ -81,27 +81,32 @@ type sourceHolder struct {
 // Validate checks if the Source configuration is valid.
 func (h *sourceHolder) Validate() error {
 	if len(strings.TrimSpace(h.Chart)) == 0 {
-		return ErrChartEmpty
+		return &ValidationError{Field: "Chart", Err: ErrChartEmpty}
 	}
 
 	releaseName := strings.TrimSpace(h.ReleaseName)
-	if len(releaseName) == 0 {
-		return ErrReleaseNameEmpty
-	}
-	if len(releaseName) > maxReleaseNameLength {
-		return fmt.Errorf(
-			"%w: must not exceed %d characters (got %d)",
-			ErrReleaseNameTooLong,
-			maxReleaseNameLength,
-			len(releaseName),
-		)
-	}
-	if !releaseNameRegex.MatchString(releaseName) {
-		return fmt.Errorf(
-			"%w (got %q)",
-			ErrReleaseNameInvalidFormat,
-			releaseName,
-		)
+	switch {
+	case len(releaseName) == 0:
+		return &ValidationError{Field: "ReleaseName", Err: ErrReleaseNameEmpty}
+	case len(releaseName) > maxReleaseNameLength:
+		return &ValidationError{
+			Field: "ReleaseName",
+			Err: fmt.Errorf(
+				"%w: must not exceed %d characters (got %d)",
+				ErrReleaseNameTooLong,
+				maxReleaseNameLength,
+				len(releaseName),
+			),
+		}
+	case !releaseNameRegex.MatchString(releaseName):
+		return &ValidationError{
+			Field: "ReleaseName",
+			Err: fmt.Errorf(
+				"%w (got %q)",
+				ErrReleaseNameInvalidFormat,
+				releaseName,
+			),
+		}
 	}
 
 	return nil
@@ -147,24 +152,34 @@ func (h *sourceHolder) LoadChart(
 		RepositoryCache: repositoryCache,
 	})
 	if err != nil {
-		return nil, fmt.Errorf(
-			"unable to locate chart (repo: %s, name: %s, version: %s): %w",
-			h.Repo,
-			h.Chart,
-			h.ReleaseVersion,
-			err,
-		)
+		return nil, &LocateError{
+			Chart:   h.Chart,
+			Repo:    h.Repo,
+			Version: h.ReleaseVersion,
+			Err: fmt.Errorf(
+				"unable to locate chart (repo: %s, name: %s, version: %s): %w",
+				h.Repo,
+				h.Chart,
+				h.ReleaseVersion,
+				err,
+			),
+		}
 	}
 
 	c, err := loader.Load(result.Path)
 	if err != nil {
-		return nil, fmt.Errorf(
-			"failed to load chart (repo: %s, name: %s, version: %s): %w",
-			h.Repo,
-			h.Chart,
-			h.ReleaseVersion,
-			err,
-		)
+		return nil, &LocateError{
+			Chart:   h.Chart,
+			Repo:    h.Repo,
+			Version: h.ReleaseVersion,
+			Err: fmt.Errorf(
+				"failed to load chart (repo: %s, name: %s, version: %s): %w",
+				h.Repo,
+				h.Chart,
+				h.ReleaseVersion,
+				err,
+			),
+		}
 	}
 
 	h.chart = c
