@@ -3,7 +3,7 @@ module github.com/k8s-manifest-kit/renderer-helm
 go 1.25.10
 
 require (
-	github.com/Masterminds/semver/v3 v3.4.0
+	github.com/Masterminds/semver/v3 v3.5.0
 	github.com/distribution/reference v0.6.0
 	github.com/k8s-manifest-kit/engine v0.2.1-0.20260519174650-411595095928
 	github.com/k8s-manifest-kit/pkg v0.2.1-0.20260519174504-96b4d2a5fd55
