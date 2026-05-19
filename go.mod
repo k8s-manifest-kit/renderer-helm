@@ -5,8 +5,8 @@ go 1.25.7
 require (
 	github.com/Masterminds/semver/v3 v3.4.0
 	github.com/distribution/reference v0.6.0
-	github.com/k8s-manifest-kit/engine v0.2.1-0.20260302081044-bbc1e11e1957
-	github.com/k8s-manifest-kit/pkg v0.2.1-0.20260302085906-6946a2e8e1d5
+	github.com/k8s-manifest-kit/engine v0.2.1-0.20260519174650-411595095928
+	github.com/k8s-manifest-kit/pkg v0.2.1-0.20260519174504-96b4d2a5fd55
 	github.com/onsi/gomega v1.41.0
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.1.1
