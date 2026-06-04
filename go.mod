@@ -3,17 +3,17 @@ module github.com/k8s-manifest-kit/renderer-helm
 go 1.25.11
 
 require (
-	github.com/Masterminds/semver/v3 v3.4.0
+	github.com/Masterminds/semver/v3 v3.5.0
 	github.com/distribution/reference v0.6.0
-	github.com/k8s-manifest-kit/engine v0.2.1-0.20260519174650-411595095928
-	github.com/k8s-manifest-kit/pkg v0.2.1-0.20260519174504-96b4d2a5fd55
+	github.com/k8s-manifest-kit/engine v0.2.1-0.20260604145727-e259f45699d3
+	github.com/k8s-manifest-kit/pkg v0.2.1-0.20260604145543-c4a39bd14f36
 	github.com/onsi/gomega v1.41.0
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/rs/xid v1.6.0
 	helm.sh/helm/v4 v4.1.1
-	k8s.io/api v0.35.2
-	k8s.io/apimachinery v0.35.2
+	k8s.io/api v0.35.5
+	k8s.io/apimachinery v0.35.5
 	oras.land/oras-go/v2 v2.6.0
 	sigs.k8s.io/yaml v1.6.0
 )
@@ -76,7 +76,7 @@ require (
 	k8s.io/client-go v0.35.2 // indirect
 	k8s.io/klog/v2 v2.130.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20260127142750-a19766b6e2d4 // indirect
-	k8s.io/utils v0.0.0-20260210185600-b8788abfbbc2 // indirect
+	k8s.io/utils v0.0.0-20260507154919-ff6756f316d2 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v6 v6.3.2 // indirect
