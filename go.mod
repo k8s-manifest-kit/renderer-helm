@@ -5,7 +5,7 @@ go 1.26.4
 require (
 	github.com/Masterminds/semver/v3 v3.5.0
 	github.com/distribution/reference v0.6.0
-	github.com/k8s-manifest-kit/engine v0.2.1-0.20260604145727-e259f45699d3
+	github.com/k8s-manifest-kit/engine v0.2.1-0.20260611122437-2eac20bfa748
 	github.com/k8s-manifest-kit/pkg v0.2.1-0.20260604145543-c4a39bd14f36
 	github.com/onsi/gomega v1.41.0
 	github.com/opencontainers/go-digest v1.0.0

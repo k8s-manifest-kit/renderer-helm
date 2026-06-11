@@ -79,8 +79,8 @@ github.com/itchyny/timefmt-go v0.1.8 h1:1YEo1JvfXeAHKdjelbYr/uCuhkybaHCeTkH8Bo79
 github.com/itchyny/timefmt-go v0.1.8/go.mod h1:5E46Q+zj7vbTgWY8o5YkMeYb4I6GeWLFnetPy5oBrAI=
 github.com/json-iterator/go v1.1.12 h1:PV8peI4a0ysnczrg+LtxykD8LfKY9ML6u2jnxaEnrnM=
 github.com/json-iterator/go v1.1.12/go.mod h1:e30LSqwooZae/UwlEbR2852Gd8hjQvJoHmT4TnhNGBo=
-github.com/k8s-manifest-kit/engine v0.2.1-0.20260604145727-e259f45699d3 h1:pn/xqV8AwZ+f5S7H5Kp8Ow2yDwXES+FXDKwdPnHSZQc=
-github.com/k8s-manifest-kit/engine v0.2.1-0.20260604145727-e259f45699d3/go.mod h1:fc5Jw9t+1iHrXRrTAngzb0dTHpqYzTQc+PX+sz76GM0=
+github.com/k8s-manifest-kit/engine v0.2.1-0.20260611122437-2eac20bfa748 h1:isPPQiGAPxaW/WHPDELea80oEMXx+812dra4WLHWru0=
+github.com/k8s-manifest-kit/engine v0.2.1-0.20260611122437-2eac20bfa748/go.mod h1:fc5Jw9t+1iHrXRrTAngzb0dTHpqYzTQc+PX+sz76GM0=
 github.com/k8s-manifest-kit/pkg v0.2.1-0.20260604145543-c4a39bd14f36 h1:jnOHg/sIMHejd3oxNrQpQtQyzimtBNN0tFpwaoD/ApM=
 github.com/k8s-manifest-kit/pkg v0.2.1-0.20260604145543-c4a39bd14f36/go.mod h1:BjftD87GS7SPirpKTu7aN1Zo4hFxuTmlHkbBoFP+TDg=
 github.com/kr/pretty v0.3.1 h1:flRD4NNwYAUpkphVc1HcthR4KEIFJ65n8Mw5qdRn3LE=
