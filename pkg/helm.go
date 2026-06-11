@@ -35,6 +35,10 @@ type Source struct {
 	// Required for proper .Release.Name substitution in templates.
 	ReleaseName string
 
+	// ReleaseNamespace is the Kubernetes namespace for the release.
+	// Used for .Release.Namespace substitution in templates. Optional; defaults to empty string.
+	ReleaseNamespace string
+
 	// ReleaseVersion constrains the chart version to fetch. Optional; uses latest if empty.
 	ReleaseVersion string
 
@@ -235,6 +239,7 @@ func (r *Renderer) processValues(
 		map[string]any(values),
 		common.ReleaseOptions{
 			Name:      holder.ReleaseName,
+			Namespace: holder.ReleaseNamespace,
 			Revision:  1,
 			IsInstall: true,
 		},

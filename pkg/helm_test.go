@@ -314,6 +314,56 @@ func TestRenderer(t *testing.T) {
 	})
 }
 
+func TestReleaseNamespace(t *testing.T) {
+
+	t.Run("should set Release.Namespace from source", func(t *testing.T) {
+		g := NewWithT(t)
+		renderer, err := helm.New([]helm.Source{
+			{
+				Chart:            testChartPath,
+				ReleaseName:      "ns-test",
+				ReleaseNamespace: "my-namespace",
+				Values: helm.Values(map[string]any{
+					"replicaCount": 1,
+				}),
+			},
+		})
+		g.Expect(err).ToNot(HaveOccurred())
+
+		objects, err := renderer.Process(t.Context(), nil)
+		g.Expect(err).ToNot(HaveOccurred())
+
+		for _, obj := range objects {
+			if obj.GetKind() == "Deployment" {
+				g.Expect(obj.GetNamespace()).To(Equal("my-namespace"))
+			}
+		}
+	})
+
+	t.Run("should default Release.Namespace to empty when not set", func(t *testing.T) {
+		g := NewWithT(t)
+		renderer, err := helm.New([]helm.Source{
+			{
+				Chart:       testChartPath,
+				ReleaseName: "no-ns-test",
+				Values: helm.Values(map[string]any{
+					"replicaCount": 1,
+				}),
+			},
+		})
+		g.Expect(err).ToNot(HaveOccurred())
+
+		objects, err := renderer.Process(t.Context(), nil)
+		g.Expect(err).ToNot(HaveOccurred())
+
+		for _, obj := range objects {
+			if obj.GetKind() == "Deployment" {
+				g.Expect(obj.GetNamespace()).To(BeEmpty())
+			}
+		}
+	})
+}
+
 func TestNew(t *testing.T) {
 
 	t.Run("should reject input without Chart", func(t *testing.T) {
