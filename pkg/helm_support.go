@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 
@@ -248,18 +249,24 @@ func (r *Renderer) processCRDs(
 
 // processRenderedTemplates extracts and processes rendered template files from Helm output.
 // Filters for YAML files, decodes them, and adds source annotations if enabled.
+// Files are processed in sorted key order for deterministic output.
 func (r *Renderer) processRenderedTemplates(
 	files map[string]string,
 	holder *sourceHolder,
 ) ([]unstructured.Unstructured, error) {
 	result := make([]unstructured.Unstructured, 0)
 
-	for k, v := range files {
-		if !strings.HasSuffix(k, ".yaml") && !strings.HasSuffix(k, ".yml") {
-			continue
+	keys := make([]string, 0, len(files))
+	for k := range files {
+		if strings.HasSuffix(k, ".yaml") || strings.HasSuffix(k, ".yml") {
+			keys = append(keys, k)
 		}
+	}
 
-		objects, err := k8s.DecodeYAML([]byte(v))
+	slices.Sort(keys)
+
+	for _, k := range keys {
+		objects, err := k8s.DecodeYAML([]byte(files[k]))
 		if err != nil {
 			return nil, fmt.Errorf(
 				"failed to decode %s: %w",
