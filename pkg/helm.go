@@ -74,7 +74,7 @@ type SourceSelector = func(ctx context.Context, source Source) (bool, error)
 // may call Process() concurrently on the same Renderer instance. Chart loading
 // is protected by per-Source mutexes to ensure thread-safe lazy initialization.
 type Renderer struct {
-	sources    []*sourceHolder
+	inputs     []*sourceHolder
 	helmEngine engine.Engine
 	opts       RendererOptions
 	cache      cache.Interface[[]unstructured.Unstructured]
@@ -107,7 +107,7 @@ func New(inputs []Source, opts ...RendererOption) (*Renderer, error) {
 	}
 
 	r := &Renderer{
-		sources: holders,
+		inputs: holders,
 		helmEngine: engine.Engine{
 			LintMode: rendererOpts.LintMode,
 			Strict:   rendererOpts.Strict,
@@ -119,19 +119,19 @@ func New(inputs []Source, opts ...RendererOption) (*Renderer, error) {
 	return r, nil
 }
 
-// Process executes the rendering logic for all configured sources.
+// Process executes the rendering logic for all configured inputs.
 // It implements the types.Renderer interface.
 // This method is safe for concurrent use.
 func (r *Renderer) Process(ctx context.Context, renderTimeValues types.Values) ([]unstructured.Unstructured, error) {
 	allObjects := make([]unstructured.Unstructured, 0)
 
-	for i := range r.sources {
-		selected, err := pipeline.ApplySourceSelectors(ctx, r.sources[i].Source, r.opts.SourceSelectors)
+	for i := range r.inputs {
+		selected, err := pipeline.ApplySourceSelectors(ctx, r.inputs[i].Source, r.opts.SourceSelectors)
 		if err != nil {
 			return nil, fmt.Errorf(
 				"source selector error for helm chart %s (release: %s): %w",
-				r.sources[i].Chart,
-				r.sources[i].ReleaseName,
+				r.inputs[i].Chart,
+				r.inputs[i].ReleaseName,
 				err,
 			)
 		}
@@ -142,22 +142,22 @@ func (r *Renderer) Process(ctx context.Context, renderTimeValues types.Values) (
 
 		sValues := renderTimeValues.DeepClone()
 
-		objects, err := r.processSingle(ctx, r.sources[i], sValues)
+		objects, err := r.processSingle(ctx, r.inputs[i], sValues)
 		if err != nil {
 			return nil, fmt.Errorf(
 				"error rendering helm chart %s (release: %s): %w",
-				r.sources[i].Chart,
-				r.sources[i].ReleaseName,
+				r.inputs[i].Chart,
+				r.inputs[i].ReleaseName,
 				err,
 			)
 		}
 
-		objects, err = pipeline.ApplyPostRenderers(ctx, objects, r.sources[i].PostRenderers)
+		objects, err = pipeline.ApplyPostRenderers(ctx, objects, r.inputs[i].PostRenderers)
 		if err != nil {
 			return nil, fmt.Errorf(
 				"source post-renderer error for helm chart %s (release: %s): %w",
-				r.sources[i].Chart,
-				r.sources[i].ReleaseName,
+				r.inputs[i].Chart,
+				r.inputs[i].ReleaseName,
 				err,
 			)
 		}
