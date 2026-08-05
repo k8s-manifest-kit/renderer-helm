@@ -102,7 +102,8 @@ func New(inputs []Source, opts ...RendererOption) (*Renderer, error) {
 			mu:     &sync.RWMutex{},
 		}
 		if err := holders[i].Validate(); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("validation failed for source[%d] (chart: %q, release: %q): %w",
+				i, inputs[i].Chart, inputs[i].ReleaseName, err)
 		}
 	}
 
