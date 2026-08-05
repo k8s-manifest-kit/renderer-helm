@@ -81,8 +81,8 @@ github.com/json-iterator/go v1.1.12 h1:PV8peI4a0ysnczrg+LtxykD8LfKY9ML6u2jnxaEnr
 github.com/json-iterator/go v1.1.12/go.mod h1:e30LSqwooZae/UwlEbR2852Gd8hjQvJoHmT4TnhNGBo=
 github.com/k8s-manifest-kit/engine v0.2.1-0.20260805104925-5d87e2dfa509 h1:fnatiu9ux6HcV2K4cu7EjstDa5Tv8AYfrqgwPP55Kuk=
 github.com/k8s-manifest-kit/engine v0.2.1-0.20260805104925-5d87e2dfa509/go.mod h1:GnTOaTotZPDVduiz2NOxAOp8CaI+ZHJL+uXO94Yol34=
-github.com/k8s-manifest-kit/pkg v0.2.1-0.20260805104432-8c3ee677c65a h1:eJfOToVMeLfT5vFZJSWVooIVjlqYQ5lyumNzQ3wy6mo=
-github.com/k8s-manifest-kit/pkg v0.2.1-0.20260805104432-8c3ee677c65a/go.mod h1:TlyLAPJFugiNXTMh4D/a/uYOiSZdm2A522ULs5OZ8d8=
+github.com/k8s-manifest-kit/pkg v0.2.1-0.20260805160524-8be7a55dd8b6 h1:crp5EeB7SrWdlAbnKKPsncN6QWfjHkw5qIKAPQpQ6nA=
+github.com/k8s-manifest-kit/pkg v0.2.1-0.20260805160524-8be7a55dd8b6/go.mod h1:TlyLAPJFugiNXTMh4D/a/uYOiSZdm2A522ULs5OZ8d8=
 github.com/kr/pretty v0.3.1 h1:flRD4NNwYAUpkphVc1HcthR4KEIFJ65n8Mw5qdRn3LE=
 github.com/kr/pretty v0.3.1/go.mod h1:hoEshYVHaxMs3cyo3Yncou5ZscifuDolrwPKZanG3xk=
 github.com/kr/text v0.2.0 h1:5Nx0Ya0ZqY2ygV366QzturHI13Jq95ApcVaJBhpS+AY=
