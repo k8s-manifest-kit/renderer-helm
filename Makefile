@@ -53,12 +53,37 @@ bench:
 deps:
 	go mod tidy
 
-.PHONY: deps/update
-deps/update:
-	@for mod in $$(grep 'github.com/k8s-manifest-kit/' go.mod | grep -v module | awk '{print $$1}'); do \
-		go get $$mod@main; \
+.PHONY: deps/update-internal
+deps/update-internal:
+	@for mod in $$(go list -m -f '{{if and (not .Main) (not .Indirect)}}{{.Path}}{{end}}' all); do \
+		case "$$mod" in \
+			github.com/k8s-manifest-kit/*) go get "$$mod@main" ;; \
+		esac; \
 	done
 	go mod tidy
+
+.PHONY: deps/update-gomega-matchers
+deps/update-gomega-matchers:
+	@mod=$$(go list -m -f '{{if and (not .Main) (not .Indirect) (eq .Path "github.com/lburgazzoli/gomega-matchers")}}{{.Path}}{{end}}' all); \
+	if [ -n "$$mod" ]; then \
+		go get "$$mod@main"; \
+	fi
+	go mod tidy
+
+.PHONY: deps/update-direct
+deps/update-direct:
+	@while read -r mod version; do \
+		case "$$mod" in \
+			"") ;; \
+			github.com/k8s-manifest-kit/*) ;; \
+			github.com/lburgazzoli/gomega-matchers) ;; \
+			*) go get "$$mod@$$version" ;; \
+		esac; \
+	done < <(go list -m -u -f '{{if and (not .Main) (not .Indirect) .Update}}{{.Path}} {{.Update.Version}}{{end}}' all)
+	go mod tidy
+
+.PHONY: deps/update
+deps/update: deps/update-internal deps/update-gomega-matchers deps/update-direct
 
 .PHONY: lint
 lint:
