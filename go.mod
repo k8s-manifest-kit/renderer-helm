@@ -7,7 +7,7 @@ require (
 	github.com/distribution/reference v0.6.0
 	github.com/k8s-manifest-kit/engine v0.2.1-0.20260805104925-5d87e2dfa509
 	github.com/k8s-manifest-kit/pkg v0.2.1-0.20260805160524-8be7a55dd8b6
-	github.com/onsi/gomega v1.42.1
+	github.com/onsi/gomega v1.43.0
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/rs/xid v1.6.0
