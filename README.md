@@ -1,10 +1,8 @@
-# renderer-helm
+# Helm Renderer
 
-Helm chart renderer with OCI support
-
-Part of the [k8s-manifest-kit](https://github.com/k8s-manifest-kit) organization.
-
-**Helm Version**: Uses Helm v4 SDK.
+`renderer-helm` renders Helm v4 charts through the shared engine interfaces.
+Sources may refer to local or remote charts, supply release metadata and
+values, process dependencies, and attach source-specific post-renderers.
 
 ## Installation
 
@@ -12,105 +10,33 @@ Part of the [k8s-manifest-kit](https://github.com/k8s-manifest-kit) organization
 go get github.com/k8s-manifest-kit/renderer-helm
 ```
 
-## Examples
-
-### Basic Usage
-
-Render a Helm chart from an OCI registry:
+## Quick start
 
 ```go
-package main
-
-import (
-    "context"
-    
-    helm "github.com/k8s-manifest-kit/renderer-helm/pkg"
+e, err := helm.NewEngine(
+    helm.Source{
+        Chart:       "./charts/my-app",
+        ReleaseName: "my-app",
+    },
 )
-
-func main() {
-    ctx := context.Background()
-    
-    // Create engine with a single Helm chart
-    engine, err := helm.NewEngine(helm.Source{
-        Chart:       "oci://registry-1.docker.io/bitnamicharts/nginx",
-        ReleaseName: "my-nginx",
-    })
-    if err != nil {
-        panic(err)
-    }
-    
-    // Render the chart
-    objects, err := engine.Render(ctx, nil)
-    if err != nil {
-        panic(err)
-    }
-    
-    // Use the rendered Kubernetes objects
-    for _, obj := range objects {
-        // Process object...
-    }
+if err != nil {
+    return err
 }
+
+objects, err := e.Render(ctx)
 ```
 
-### With Values
+Use `helm.Source.Values` for dynamic values. Engine options support filters,
+transformers, post-renderers, source selection, repository configuration and
+caching, source annotations, content hashes, lint mode, and strict mode.
 
-Override chart values during rendering:
+Multiple sources can be passed to `helm.NewEngine`; render-time values are
+merged with source values according to the renderer's documented precedence.
+Repository and chart loading is lazy and synchronized per source.
 
-```go
-engine, err := helm.NewEngine(helm.Source{
-    Chart:       "oci://registry-1.docker.io/bitnamicharts/nginx",
-    ReleaseName: "my-nginx",
-    Values: helm.Values(map[string]any{
-        "replicaCount": 3,
-        "image": map[string]any{
-            "tag": "1.25",
-        },
-    }),
-})
-if err != nil {
-    panic(err)
-}
-
-objects, err := engine.Render(ctx, map[string]any{
-    "service": map[string]any{
-        "type": "LoadBalancer",
-    },
-})
-```
-
-### Multiple Charts
-
-Render multiple charts using the renderer directly:
-
-```go
-renderer, err := helm.New([]helm.Source{
-    {
-        Chart:       "oci://registry/chart1",
-        ReleaseName: "app",
-    },
-    {
-        Chart:       "oci://registry/chart2",
-        ReleaseName: "db",
-    },
-})
-if err != nil {
-    panic(err)
-}
-
-objects, err := renderer.Process(ctx, nil)
-if err != nil {
-    panic(err)
-}
-```
-
-## Documentation
-
-See the main [docs repository](https://github.com/k8s-manifest-kit/docs) for comprehensive documentation.
-
-## Contributing
-
-Contributions are welcome! Please see our [contributing guidelines](https://github.com/k8s-manifest-kit/docs/blob/main/CONTRIBUTING.md).
+See [`docs/design.md`](docs/design.md), [`docs/development.md`](docs/development.md),
+and [`AGENTS.md`](AGENTS.md).
 
 ## License
 
-Apache License 2.0 - See [LICENSE](LICENSE) for details.
+Apache License 2.0. See [LICENSE](LICENSE).
