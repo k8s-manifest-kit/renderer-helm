@@ -33,7 +33,7 @@ type Locator interface {
 // Credentials holds authentication credentials for accessing Helm repositories and registries.
 type Credentials struct {
 	Username string
-	Password string //nolint:gosec // not a hardcoded credential, just a field name
+	Password string
 }
 
 func (c *Credentials) hasAuth() bool {

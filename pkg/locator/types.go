@@ -1,9 +1,10 @@
 package locator
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
-	"sort"
+	"slices"
 
 	"github.com/Masterminds/semver/v3"
 )
@@ -36,14 +37,18 @@ func (vs repoChartVersions) Len() int      { return len(vs) }
 func (vs repoChartVersions) Swap(i, j int) { vs[i], vs[j] = vs[j], vs[i] }
 
 func (vs repoChartVersions) Less(i, j int) bool {
-	vi, ei := semver.NewVersion(vs[i].Version)
-	vj, ej := semver.NewVersion(vs[j].Version)
+	return compareRepoChartVersions(vs[i], vs[j]) < 0
+}
 
-	if ei != nil || ej != nil {
-		return vs[i].Version < vs[j].Version
+func compareRepoChartVersions(a, b repoChartVersion) int {
+	va, errA := semver.NewVersion(a.Version)
+	vb, errB := semver.NewVersion(b.Version)
+
+	if errA != nil || errB != nil {
+		return cmp.Compare(a.Version, b.Version)
 	}
 
-	return vi.GreaterThan(vj)
+	return vb.Compare(va)
 }
 
 func (idx *repoIndex) resolve(name string, version string) (*repoChartVersion, error) {
@@ -52,7 +57,7 @@ func (idx *repoIndex) resolve(name string, version string) (*repoChartVersion, e
 		return nil, fmt.Errorf("%w: %q", ErrChartNotFound, name)
 	}
 
-	sort.Sort(versions)
+	slices.SortFunc(versions, compareRepoChartVersions)
 
 	if version == "" {
 		return &versions[0], nil

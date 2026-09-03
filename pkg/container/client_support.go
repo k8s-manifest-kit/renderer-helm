@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
@@ -194,7 +194,9 @@ func latestSemver(tags []string) (*semver.Version, error) {
 		return nil, ErrNoValidSemverTag
 	}
 
-	sort.Sort(sort.Reverse(semver.Collection(versions)))
+	slices.SortFunc(versions, func(a, b *semver.Version) int {
+		return b.Compare(a)
+	})
 
 	return versions[0], nil
 }

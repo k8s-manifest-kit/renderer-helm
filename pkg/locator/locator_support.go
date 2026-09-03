@@ -90,7 +90,7 @@ func httpGet(ctx context.Context, client *http.Client, rawURL string, creds *Cre
 		client = newHTTPClient()
 	}
 
-	resp, err := client.Do(req) //nolint:gosec // URL is constructed from user-provided repo config
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("HTTP request failed: %w", err)
 	}

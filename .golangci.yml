@@ -12,6 +12,7 @@ linters:
     - paralleltest
     - noinlineerr
     - whitespace  # Extra empty lines acceptable for readability
+    - goconst  # Existing test fixtures intentionally repeat literal keys and values
   exclusions:
     rules:
       # Test files (includes benchmarks since they're in *_test.go files)
@@ -42,6 +43,8 @@ linters:
           disabled: true  # Common practice for Gomega test assertions
         - name: var-naming
           disabled: true  # "types" and "util" are reasonable package names
+        - name: package-naming
+          disabled: true  # Existing package names are part of the public module layout
         - name: line-length-limit
           disabled: true  # 80 character limit is too restrictive for modern code
         - name: function-length
