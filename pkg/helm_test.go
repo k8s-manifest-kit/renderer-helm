@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sync"
 	"testing"
+	"testing/fstest"
 
 	"github.com/rs/xid"
 
@@ -96,6 +98,44 @@ func TestRenderer(t *testing.T) {
 				// Ignore other kinds
 			}
 		}
+		g.Expect(foundCRD).To(BeTrue(), "Should have rendered CRD")
+		g.Expect(foundDeployment).To(BeTrue(), "Should have rendered Deployment")
+		g.Expect(foundService).To(BeTrue(), "Should have rendered Service")
+	})
+
+	t.Run("should render chart from io/fs filesystem", func(t *testing.T) {
+		g := NewWithT(t)
+		renderer, err := helm.New([]helm.Source{
+			{
+				FS:          mapChartFS(t),
+				Chart:       "chart",
+				ReleaseName: "iofs-test",
+				Values: helm.Values(map[string]any{
+					"replicaCount": 2,
+				}),
+			},
+		})
+		g.Expect(err).ToNot(HaveOccurred())
+
+		objects, err := renderer.Process(t.Context(), nil)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(objects).To(HaveLen(3))
+
+		var foundCRD, foundDeployment, foundService bool
+		for _, obj := range objects {
+			switch obj.GetKind() {
+			case "CustomResourceDefinition":
+				foundCRD = true
+			case "Deployment":
+				foundDeployment = true
+				g.Expect(obj.GetName()).To(Equal("iofs-test-deployment"))
+			case "Service":
+				foundService = true
+			default:
+				// Ignore other kinds.
+			}
+		}
+
 		g.Expect(foundCRD).To(BeTrue(), "Should have rendered CRD")
 		g.Expect(foundDeployment).To(BeTrue(), "Should have rendered Deployment")
 		g.Expect(foundService).To(BeTrue(), "Should have rendered Service")
@@ -375,6 +415,22 @@ func TestNew(t *testing.T) {
 		})
 		g.Expect(err).To(HaveOccurred())
 		g.Expect(err.Error()).To(ContainSubstring("chart cannot be empty or whitespace-only"))
+		g.Expect(renderer).To(BeNil())
+	})
+
+	t.Run("should reject filesystem source with Repo", func(t *testing.T) {
+		g := NewWithT(t)
+		renderer, err := helm.New([]helm.Source{
+			{
+				FS:          fstest.MapFS{},
+				Repo:        "https://charts.example.com",
+				Chart:       ".",
+				ReleaseName: "test",
+			},
+		})
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(helm.IsValidationError(err)).To(BeTrue())
+		g.Expect(err.Error()).To(ContainSubstring("cannot be combined with Repo or OCI references"))
 		g.Expect(renderer).To(BeNil())
 	})
 
@@ -1561,6 +1617,44 @@ func TestRendererRemoteSources(t *testing.T) {
 	})
 }
 
+func TestFilesystemErrors(t *testing.T) {
+	t.Run("should reject a missing filesystem chart root", func(t *testing.T) {
+		g := NewWithT(t)
+		renderer, err := helm.New([]helm.Source{
+			{
+				FS:          fstest.MapFS{},
+				Chart:       "missing",
+				ReleaseName: "test",
+			},
+		})
+		g.Expect(err).ToNot(HaveOccurred())
+
+		_, err = renderer.Process(t.Context(), nil)
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(err.Error()).To(ContainSubstring("failed to walk chart root"))
+	})
+
+	t.Run("should reject a filesystem chart without Chart.yaml", func(t *testing.T) {
+		g := NewWithT(t)
+		renderer, err := helm.New([]helm.Source{
+			{
+				FS: fstest.MapFS{
+					"chart/templates/ignored.yaml": &fstest.MapFile{
+						Data: []byte("apiVersion: v1\nkind: ConfigMap\n"),
+					},
+				},
+				Chart:       "chart",
+				ReleaseName: "test",
+			},
+		})
+		g.Expect(err).ToNot(HaveOccurred())
+
+		_, err = renderer.Process(t.Context(), nil)
+		g.Expect(err).To(HaveOccurred())
+		g.Expect(err.Error()).To(ContainSubstring("Chart.yaml file is missing"))
+	})
+}
+
 func objectIdentities(objects []unstructured.Unstructured) []string {
 	ids := make([]string, 0, len(objects))
 	for _, obj := range objects {
@@ -1571,4 +1665,51 @@ func objectIdentities(objects []unstructured.Unstructured) []string {
 	}
 
 	return ids
+}
+
+func mapChartFS(t *testing.T) fstest.MapFS {
+	t.Helper()
+
+	diskFS := os.DirFS(testChartPath)
+	chartFS := fstest.MapFS{}
+	err := fs.WalkDir(diskFS, ".", func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() {
+			return nil
+		}
+
+		data, err := fs.ReadFile(diskFS, path)
+		if err != nil {
+			return fmt.Errorf("failed to read %q: %w", path, err)
+		}
+
+		info, err := entry.Info()
+		if err != nil {
+			return fmt.Errorf("failed to stat %q: %w", path, err)
+		}
+
+		chartFS["chart/"+path] = &fstest.MapFile{
+			Data:    data,
+			Mode:    info.Mode(),
+			ModTime: info.ModTime(),
+		}
+
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("failed to build chart filesystem: %v", err)
+	}
+
+	chartFS["chart/.helmignore"] = &fstest.MapFile{
+		Data: []byte("templates/ignored.yaml\n"),
+		Mode: 0o644,
+	}
+	chartFS["chart/templates/ignored.yaml"] = &fstest.MapFile{
+		Data: []byte("{{ invalid template"),
+		Mode: 0o644,
+	}
+
+	return chartFS
 }

@@ -3,6 +3,7 @@ package helm
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"sync"
 
 	"helm.sh/helm/v4/pkg/chart/common"
@@ -27,9 +28,15 @@ type Source struct {
 	// Repo is the repository URL for chart lookup. Optional for local or OCI charts.
 	Repo string
 
-	// Chart specifies the chart to render. Supports OCI references (oci://registry/chart:tag)
-	// or local filesystem paths. Required.
+	// Chart specifies the chart to render. It supports OCI references
+	// (oci://registry/chart:tag), local filesystem paths, or a path within FS.
+	// Required.
 	Chart string
+
+	// FS is an optional filesystem containing the chart. When set, Chart is
+	// interpreted as a path relative to this filesystem and Repo must be empty.
+	// Use "." to load a chart from the filesystem root.
+	FS fs.FS
 
 	// ReleaseName is the Helm release name used in template rendering metadata.
 	// Required for proper .Release.Name substitution in templates.

@@ -26,6 +26,23 @@ if err != nil {
 objects, err := e.Render(ctx)
 ```
 
+Charts can also be loaded from an `io/fs` filesystem. `Chart` is then the
+chart root relative to that filesystem:
+
+```go
+e, err := helm.NewEngine(
+    helm.Source{
+        FS:          chartFS,
+        Chart:       "charts/my-app",
+        ReleaseName: "my-app",
+    },
+)
+```
+
+Filesystem-backed charts use Helm's in-memory chart loader and do not require
+a temporary directory. `Repo` and OCI chart references cannot be combined with
+`FS`.
+
 Use `helm.Source.Values` for dynamic values. Engine options support filters,
 transformers, post-renderers, source selection, repository configuration and
 caching, source annotations, content hashes, lint mode, and strict mode.

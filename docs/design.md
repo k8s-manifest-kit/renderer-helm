@@ -7,6 +7,12 @@
 function, optional locator `Credentials`, `ProcessDependencies`, and
 source-specific `PostRenderers`.
 
+For local or embedded chart content, `Source.FS` may provide an `io/fs.FS` and
+`Source.Chart` identifies the chart root within it. The filesystem contents are
+converted to Helm buffered files and loaded with Helm's `LoadFiles` API. The
+existing path, repository, and OCI loading flows remain unchanged when `FS` is
+nil.
+
 `helm.NewEngine` accepts one or more sources. `SourceSelector` functions can
 exclude sources before rendering. Source loading and chart discovery are lazy
 and synchronized per source, allowing independent sources to be loaded safely

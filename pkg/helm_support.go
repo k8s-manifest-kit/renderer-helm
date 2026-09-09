@@ -44,6 +44,7 @@ var (
 		"release name must consist of lowercase alphanumeric characters or '-', " +
 			"and must start and end with an alphanumeric character",
 	)
+	errFilesystemSourceConflict = errors.New("filesystem-backed charts cannot be combined with Repo or OCI references")
 
 	// releaseNameRegex is the compiled regex for validating release names.
 	releaseNameRegex = regexp.MustCompile(releaseNamePattern)
@@ -83,6 +84,12 @@ type sourceHolder struct {
 func (h *sourceHolder) Validate() error {
 	if len(strings.TrimSpace(h.Chart)) == 0 {
 		return &ValidationError{Field: "Chart", Err: ErrChartEmpty}
+	}
+	if h.FS != nil && (strings.TrimSpace(h.Repo) != "" || strings.HasPrefix(strings.TrimSpace(h.Chart), "oci://")) {
+		return &ValidationError{
+			Field: "FS",
+			Err:   errFilesystemSourceConflict,
+		}
 	}
 
 	releaseName := strings.TrimSpace(h.ReleaseName)
@@ -145,29 +152,36 @@ func (h *sourceHolder) LoadChart(
 		return nil, fmt.Errorf("context cancelled during chart load: %w", err)
 	}
 
-	result, err := locator.Locate(ctx, &locator.Request{
-		Name:            h.Chart,
-		RepoURL:         h.Repo,
-		Version:         h.ReleaseVersion,
-		Credentials:     h.Credentials,
-		RepositoryCache: repositoryCache,
-	})
-	if err != nil {
-		return nil, &LocateError{
-			Chart:   h.Chart,
-			Repo:    h.Repo,
-			Version: h.ReleaseVersion,
-			Err: fmt.Errorf(
-				"unable to locate chart (repo: %s, name: %s, version: %s): %w",
-				h.Repo,
-				h.Chart,
-				h.ReleaseVersion,
-				err,
-			),
+	var c *chart.Chart
+	var err error
+	if h.FS != nil {
+		c, err = loadChartFromFS(h.FS, h.Chart)
+	} else {
+		var result locator.Result
+		result, err = locator.Locate(ctx, &locator.Request{
+			Name:            h.Chart,
+			RepoURL:         h.Repo,
+			Version:         h.ReleaseVersion,
+			Credentials:     h.Credentials,
+			RepositoryCache: repositoryCache,
+		})
+		if err != nil {
+			return nil, &LocateError{
+				Chart:   h.Chart,
+				Repo:    h.Repo,
+				Version: h.ReleaseVersion,
+				Err: fmt.Errorf(
+					"unable to locate chart (repo: %s, name: %s, version: %s): %w",
+					h.Repo,
+					h.Chart,
+					h.ReleaseVersion,
+					err,
+				),
+			}
 		}
-	}
 
-	c, err := loader.Load(result.Path)
+		c, err = loader.Load(result.Path)
+	}
 	if err != nil {
 		return nil, &LocateError{
 			Chart:   h.Chart,

@@ -14,7 +14,7 @@ The package is imported from `github.com/k8s-manifest-kit/renderer-helm/pkg`.
 
 - `helm.New([]helm.Source{...}, opts...)` creates a renderer for one or more charts.
 - `helm.NewEngine(source, opts...)` creates an `engine.Engine` for one chart.
-- `Source` fields include `Repo`, `Chart`, `ReleaseName`, `ReleaseNamespace`, `ReleaseVersion`, `Values`, `Credentials`, `ProcessDependencies`, and source-specific `PostRenderers`.
+- `Source` fields include `Repo`, `Chart`, optional `FS`, `ReleaseName`, `ReleaseNamespace`, `ReleaseVersion`, `Values`, `Credentials`, `ProcessDependencies`, and source-specific `PostRenderers`.
 - `Values(map[string]any)` and `StaticCredentials(username, password)` provide static callbacks.
 - Renderer options include filters, transformers, post-renderers, source selectors, caching, source annotations, content hashes, repository/content paths, lint mode, and strict mode.
 
@@ -35,4 +35,3 @@ make check
 ```
 
 Helm and registry tests may need network access. Use the checked-in test charts for deterministic tests where possible, unique valid release names, Gomega assertions, and `t.Context()`.
-
