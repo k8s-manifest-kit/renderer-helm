@@ -239,6 +239,20 @@ func (r *Renderer) addSourceAnnotations(
 	}
 }
 
+// addRenderOrigin adds the render-origin annotation when source annotations are enabled.
+func (r *Renderer) addRenderOrigin(
+	objects []unstructured.Unstructured,
+	origin string,
+) {
+	if !r.opts.SourceAnnotations {
+		return
+	}
+
+	for i := range objects {
+		types.SetRenderOrigin(&objects[i], origin)
+	}
+}
+
 // processCRDs extracts and processes CRD objects from a Helm chart.
 // Returns the decoded unstructured objects with source annotations added if enabled.
 func (r *Renderer) processCRDs(

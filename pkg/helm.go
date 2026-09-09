@@ -297,6 +297,8 @@ func (r *Renderer) processSingle(
 		r.cache.Sync()
 
 		if cached, found := r.cache.Get(spec); found {
+			r.addRenderOrigin(cached, types.RenderOriginCache)
+
 			return cached, nil
 		}
 	}
@@ -334,6 +336,7 @@ func (r *Renderer) processSingle(
 	if r.cache != nil {
 		r.cache.Set(spec, result)
 	}
+	r.addRenderOrigin(result, types.RenderOriginLive)
 
 	return result, nil
 }
