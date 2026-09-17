@@ -19,6 +19,8 @@ var (
 	errChartFileTooLarge  = errors.New("chart file is larger than the maximum file size")
 )
 
+const maxDecompressedChartFileSize int64 = 5 * 1024 * 1024
+
 func loadChartFromFS(fsys fs.FS, root string) (*chart.Chart, error) {
 	chartFS, err := fs.Sub(fsys, root)
 	if err != nil {
@@ -109,8 +111,8 @@ func collectChartFile(
 	if !info.Mode().IsRegular() {
 		return fmt.Errorf("%w: %q", errIrregularChartFile, path)
 	}
-	if info.Size() > archive.MaxDecompressedFileSize {
-		return fmt.Errorf("%w: %q (limit %d)", errChartFileTooLarge, path, archive.MaxDecompressedFileSize)
+	if info.Size() > maxDecompressedChartFileSize {
+		return fmt.Errorf("%w: %q (limit %d)", errChartFileTooLarge, path, maxDecompressedChartFileSize)
 	}
 
 	data, err := fs.ReadFile(fsys, path)

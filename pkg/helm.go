@@ -308,7 +308,7 @@ func (r *Renderer) processSingle(
 		return nil, fmt.Errorf("context cancelled before render: %w", err)
 	}
 
-	files, err := r.helmEngine.Render(chart, renderValues)
+	files, err := r.helmEngine.RenderWithContext(ctx, chart, renderValues)
 	if err != nil {
 		return nil, &RenderError{
 			Chart:       holder.Chart,
