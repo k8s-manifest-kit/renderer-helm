@@ -1,6 +1,6 @@
 module github.com/k8s-manifest-kit/renderer-helm
 
-go 1.26.9
+go 1.27.2
 
 require (
 	github.com/Masterminds/semver/v3 v3.5.0

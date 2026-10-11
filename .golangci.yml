@@ -9,6 +9,7 @@ linters:
     - wsl_v5
     - varnamelen
     - exhaustruct
+    - exhaustruct_v5
     - funlen
     - ireturn
     - depguard
@@ -16,6 +17,7 @@ linters:
     - noinlineerr
     - whitespace  # Extra empty lines acceptable for readability
     - goconst  # Existing test fixtures intentionally repeat literal keys and values
+    - modernize  # gopls modernization suggestions, not part of the v2.12.2 linter set
   exclusions:
     rules:
       # Test files (includes benchmarks since they're in *_test.go files)
