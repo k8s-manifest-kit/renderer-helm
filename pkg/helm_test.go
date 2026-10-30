@@ -704,21 +704,28 @@ func TestCacheIntegration(t *testing.T) {
 				ReleaseName: "dynamic-cache-test",
 				Values:      dynamicValues,
 			},
-		})
+		},
+			helm.WithCache(),
+			helm.WithSourceAnnotations(true),
+		)
 		g.Expect(err).ToNot(HaveOccurred())
 
-		// First render
+		// First render - cache miss
 		result1, err := renderer.Process(t.Context(), nil)
 		g.Expect(err).ToNot(HaveOccurred())
 		g.Expect(result1).To(HaveLen(3))
+		assertRenderOrigin(g, result1, types.RenderOriginLive)
 
-		// Second render with different values - cache miss
+		// Second render with different values - cache miss again: the default
+		// key includes the rendered values, so new values must re-render.
 		result2, err := renderer.Process(t.Context(), nil)
 		g.Expect(err).ToNot(HaveOccurred())
 		g.Expect(result2).To(HaveLen(3))
+		assertRenderOrigin(g, result2, types.RenderOriginLive)
 
-		// Values function should be called twice (no cache hits)
-		g.Expect(callCount).To(Equal(2))
+		// The second render must produce its own output, not a stale result.
+		g.Expect(deploymentReplicas(g, result1)).To(Equal(int64(1)))
+		g.Expect(deploymentReplicas(g, result2)).To(Equal(int64(2)))
 	})
 
 	t.Run("should work with cache disabled", func(t *testing.T) {
@@ -757,27 +764,41 @@ func TestCacheIntegration(t *testing.T) {
 					"replicaCount": 1,
 				}),
 			},
-		})
+		},
+			helm.WithCache(),
+			helm.WithSourceAnnotations(true),
+		)
 		g.Expect(err).ToNot(HaveOccurred())
 
-		// First render
+		// First render populates the cache
 		result1, err := renderer.Process(t.Context(), nil)
 		g.Expect(err).ToNot(HaveOccurred())
 		g.Expect(result1).To(HaveLen(3))
+		assertRenderOrigin(g, result1, types.RenderOriginLive)
 
-		// Modify first result
-		if len(result1) > 0 {
-			result1[0].SetName("modified-name")
+		// Mutate the nested objects of the returned result
+		for i := range result1 {
+			result1[i].SetName("modified-name")
 		}
 
-		// Second render - should not be affected by modification
+		// Second render hits the cache and must be unaffected by the mutations
 		result2, err := renderer.Process(t.Context(), nil)
 		g.Expect(err).ToNot(HaveOccurred())
 		g.Expect(result2).To(HaveLen(3))
+		assertRenderOrigin(g, result2, types.RenderOriginCache)
 
-		if len(result2) > 0 {
-			g.Expect(result2[0].GetName()).ToNot(Equal("modified-name"))
+		for i := range result2 {
+			g.Expect(result2[i].GetName()).ToNot(Equal("modified-name"))
 		}
+
+		// Mutating a cached result must not pollute later hits either
+		result2[0].SetName("modified-again")
+
+		result3, err := renderer.Process(t.Context(), nil)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(result3).To(HaveLen(3))
+		assertRenderOrigin(g, result3, types.RenderOriginCache)
+		g.Expect(result3[0].GetName()).ToNot(Equal("modified-again"))
 	})
 
 	t.Run("should use custom cache key function", func(t *testing.T) {
@@ -794,6 +815,7 @@ func TestCacheIntegration(t *testing.T) {
 			},
 		},
 			helm.WithCache(cache.WithKeyFunc(helm.FastCacheKeyFunc)),
+			helm.WithSourceAnnotations(true),
 		)
 		g.Expect(err).ToNot(HaveOccurred())
 
@@ -801,19 +823,21 @@ func TestCacheIntegration(t *testing.T) {
 		result1, err := renderer.Process(t.Context(), nil)
 		g.Expect(err).ToNot(HaveOccurred())
 		g.Expect(result1).To(HaveLen(3))
+		assertRenderOrigin(g, result1, types.RenderOriginLive)
+		g.Expect(deploymentReplicas(g, result1)).To(Equal(int64(1)))
 
 		// Second render with DIFFERENT values but using FastCacheKeyFunc
-		// which ignores values, so this should be a cache hit
+		// which ignores values within one source, so this is a cache hit
 		result2, err := renderer.Process(t.Context(), map[string]any{
 			"replicaCount": 5,
 		})
 		g.Expect(err).ToNot(HaveOccurred())
 		g.Expect(result2).To(HaveLen(len(result1)))
+		assertRenderOrigin(g, result2, types.RenderOriginCache)
 
-		// Results should be identical despite different values (cache hit)
-		for i := range result1 {
-			g.Expect(result2[i]).To(Equal(result1[i]))
-		}
+		// The hit must serve the first render's output even though the second
+		// render passed different values
+		g.Expect(deploymentReplicas(g, result2)).To(Equal(int64(1)))
 	})
 }
 

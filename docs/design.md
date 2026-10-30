@@ -61,6 +61,19 @@ Repository configuration and repository cache paths are separate from the
 render content cache. The shared cache option accepts `cache.WithTTL` and
 `cache.WithKeyFunc`. Cached render output is cloned at cache boundaries.
 
+Render output caches are partitioned by source: every registered source owns an
+independent cache created from the same renderer cache options. Two sources
+therefore never reuse each other's output, even when their chart specs are
+identical or when the configured key function — including `FastCacheKeyFunc` or
+a constant custom key — maps them to the same key. Key functions only decide
+reuse within a single source: a constant custom key still merges renders of the
+same source, and source-specific post-renderers reapply to the cloned results
+on every hit.
+
+Cache entries expire after the configured TTL. Expiry only causes the next
+render of a source to run live; the chart itself is a memoized snapshot and is
+never reloaded or refetched because a cache entry expired.
+
 See [`../AGENTS.md`](../AGENTS.md) and [`development.md`](development.md).
 
 ## OCI content integrity

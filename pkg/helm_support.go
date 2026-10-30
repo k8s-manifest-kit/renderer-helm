@@ -15,6 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	"github.com/k8s-manifest-kit/engine/pkg/types"
+	"github.com/k8s-manifest-kit/pkg/util/cache"
 	"github.com/k8s-manifest-kit/pkg/util/k8s"
 	"github.com/k8s-manifest-kit/renderer-helm/pkg/locator"
 )
@@ -81,6 +82,14 @@ type sourceHolder struct {
 	// dependency processing cannot corrupt later or concurrent renders.
 	// (protected by mu)
 	chart *chart.Chart
+
+	// cache is this source's isolated render-output cache. Every registered
+	// source owns an independent cache instance built from the renderer cache
+	// options, so identical chart specs, FastCacheKeyFunc keys, or colliding
+	// custom keys can never make one source reuse another source's output.
+	// Key functions therefore only decide reuse within a single source.
+	// nil when caching is disabled.
+	cache cache.Interface[[]unstructured.Unstructured]
 }
 
 // Validate checks if the Source configuration is valid.

@@ -17,7 +17,6 @@ import (
 
 	"github.com/k8s-manifest-kit/engine/pkg/pipeline"
 	"github.com/k8s-manifest-kit/engine/pkg/types"
-	"github.com/k8s-manifest-kit/pkg/util/cache"
 	"github.com/k8s-manifest-kit/pkg/util/maps"
 	"github.com/k8s-manifest-kit/renderer-helm/pkg/locator"
 )
@@ -85,7 +84,6 @@ type Renderer struct {
 	inputs     []*sourceHolder
 	helmEngine engine.Engine
 	opts       RendererOptions
-	cache      cache.Interface[[]unstructured.Unstructured]
 }
 
 // New creates a new Helm Renderer with the given inputs and options.
@@ -108,6 +106,9 @@ func New(inputs []Source, opts ...RendererOption) (*Renderer, error) {
 		holders[i] = &sourceHolder{
 			Source: inputs[i],
 			mu:     &sync.RWMutex{},
+			// Each source gets an independent output cache so cache entries
+			// never cross source boundaries, even when keys collide.
+			cache: newCache(rendererOpts.CacheOptions),
 		}
 		if err := holders[i].Validate(); err != nil {
 			return nil, fmt.Errorf("validation failed for source[%d] (chart: %q, release: %q): %w",
@@ -121,8 +122,7 @@ func New(inputs []Source, opts ...RendererOption) (*Renderer, error) {
 			LintMode: rendererOpts.LintMode,
 			Strict:   rendererOpts.Strict,
 		},
-		opts:  rendererOpts,
-		cache: newCache(rendererOpts.CacheOptions),
+		opts: rendererOpts,
 	}
 
 	return r, nil
@@ -303,11 +303,11 @@ func (r *Renderer) processSingle(
 	}
 
 	// Check cache (if enabled)
-	if r.cache != nil {
+	if holder.cache != nil {
 		// ensure objects are evicted
-		r.cache.Sync()
+		holder.cache.Sync()
 
-		if cached, found := r.cache.Get(spec); found {
+		if cached, found := holder.cache.Get(spec); found {
 			r.addRenderOrigin(cached, types.RenderOriginCache)
 
 			return cached, nil
@@ -344,8 +344,8 @@ func (r *Renderer) processSingle(
 	}
 	result = append(result, templateObjects...)
 
-	if r.cache != nil {
-		r.cache.Set(spec, result)
+	if holder.cache != nil {
+		holder.cache.Set(spec, result)
 	}
 	r.addRenderOrigin(result, types.RenderOriginLive)
 

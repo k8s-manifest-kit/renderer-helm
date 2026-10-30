@@ -11,6 +11,9 @@ import (
 )
 
 // chartSpec contains the data used to generate cache keys for rendered charts.
+// Keys are evaluated within a single source's cache: every registered source
+// owns an independent output cache, so sources with identical specs never
+// share entries.
 type chartSpec struct {
 	Chart          string
 	ReleaseName    string
@@ -21,6 +24,9 @@ type chartSpec struct {
 // FastCacheKeyFunc generates cache keys based only on chart identity, ignoring values.
 // This provides significantly better cache performance but means all renders of the
 // same chart+release+version will share cached results regardless of values.
+// Keys never cross source boundaries: each registered source owns an isolated
+// output cache, so two sources with the same chart+release+version still render
+// and cache their own results.
 //
 // Use this when:
 //   - Values are static and don't change between renders
@@ -38,6 +44,9 @@ func FastCacheKeyFunc(key any) string {
 }
 
 // newCache creates a cache instance with Helm-specific default KeyFunc.
+// Each call returns an independent cache: the renderer creates one per
+// registered source so cached outputs never cross source boundaries.
+// It returns nil when caching is disabled.
 func newCache(opts *cache.Options) cache.Interface[[]unstructured.Unstructured] {
 	if opts == nil {
 		return nil
