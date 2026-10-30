@@ -1,0 +1,6 @@
+apiVersion: v2
+name: child-c
+description: Subchart referenced through a dependency alias
+type: application
+version: 1.0.0
+appVersion: "1.0"

@@ -76,7 +76,10 @@ type sourceHolder struct {
 	// Mutex protects concurrent access to chart field
 	mu *sync.RWMutex
 
-	// The loaded Helm chart (protected by mu)
+	// The pristine chart produced by the first successful load. It is never
+	// mutated after assignment: every render runs against a copy of it, so
+	// dependency processing cannot corrupt later or concurrent renders.
+	// (protected by mu)
 	chart *chart.Chart
 }
 
@@ -121,6 +124,8 @@ func (h *sourceHolder) Validate() error {
 }
 
 // LoadChart returns the loaded Helm chart, loading it lazily if needed.
+// The returned chart is the renderer's immutable source snapshot: callers must
+// not mutate it. Rendering works on per-invocation copies (see copyChart).
 // Thread-safe for concurrent use with optimized read-path performance.
 func (h *sourceHolder) LoadChart(
 	ctx context.Context,

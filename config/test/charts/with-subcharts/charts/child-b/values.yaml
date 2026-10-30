@@ -1,0 +1,3 @@
+config:
+  message: child-b-default-message
+  keep: child-b-default-keep

@@ -1,0 +1,5 @@
+exports:
+  data: child-a-export-data
+config:
+  message: child-a-default-message
+  keep: child-a-default-keep

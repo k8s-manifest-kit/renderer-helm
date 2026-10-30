@@ -8,6 +8,7 @@ import (
 
 	"helm.sh/helm/v4/pkg/chart/common"
 	commonutil "helm.sh/helm/v4/pkg/chart/common/util"
+	chart "helm.sh/helm/v4/pkg/chart/v2"
 	chartutil "helm.sh/helm/v4/pkg/chart/v2/util"
 	"helm.sh/helm/v4/pkg/engine"
 	"helm.sh/helm/v4/pkg/helmpath"
@@ -216,9 +217,14 @@ func (r *Renderer) values(
 
 // processValues gets values from the Values function, processes dependencies,
 // and prepares render values using chartutil.ToRenderValues.
+//
+// helmChart is the per-render chart copy owned by the current invocation:
+// dependency processing mutates it. It must not be the renderer's source
+// snapshot.
 func (r *Renderer) processValues(
 	ctx context.Context,
 	holder *sourceHolder,
+	helmChart *chart.Chart,
 	renderTimeValues types.Values,
 ) (common.Values, error) {
 	values, err := r.values(ctx, holder, renderTimeValues)
@@ -232,7 +238,7 @@ func (r *Renderer) processValues(
 	}
 
 	if holder.ProcessDependencies {
-		if err := chartutil.ProcessDependencies(holder.chart, map[string]any(values)); err != nil {
+		if err := chartutil.ProcessDependencies(helmChart, map[string]any(values)); err != nil {
 			return nil, fmt.Errorf(
 				"failed to process dependencies for chart %q (release %q): %w",
 				holder.Chart,
@@ -243,7 +249,7 @@ func (r *Renderer) processValues(
 	}
 
 	renderValues, err := commonutil.ToRenderValues(
-		holder.chart,
+		helmChart,
 		map[string]any(values),
 		common.ReleaseOptions{
 			Name:      holder.ReleaseName,
@@ -273,13 +279,18 @@ func (r *Renderer) processSingle(
 	holder *sourceHolder,
 	renderTimeValues types.Values,
 ) ([]unstructured.Unstructured, error) {
-	// Load chart if not already loaded (thread-safe lazy loading)
-	chart, err := holder.LoadChart(ctx, r.opts.RepositoryCache)
+	// Load chart if not already loaded (thread-safe lazy loading). The loaded
+	// chart is the renderer's immutable source snapshot: dependency processing
+	// and rendering run against a per-invocation copy so that repeated and
+	// concurrent renders leave the snapshot pristine.
+	source, err := holder.LoadChart(ctx, r.opts.RepositoryCache)
 	if err != nil {
 		return nil, err
 	}
 
-	renderValues, err := r.processValues(ctx, holder, renderTimeValues)
+	helmChart := copyChart(source)
+
+	renderValues, err := r.processValues(ctx, holder, helmChart, renderTimeValues)
 	if err != nil {
 		return nil, &RenderError{Chart: holder.Chart, ReleaseName: holder.ReleaseName, Err: err}
 	}
@@ -308,7 +319,7 @@ func (r *Renderer) processSingle(
 		return nil, fmt.Errorf("context cancelled before render: %w", err)
 	}
 
-	files, err := r.helmEngine.RenderWithContext(ctx, chart, renderValues)
+	files, err := r.helmEngine.RenderWithContext(ctx, helmChart, renderValues)
 	if err != nil {
 		return nil, &RenderError{
 			Chart:       holder.Chart,
@@ -321,7 +332,7 @@ func (r *Renderer) processSingle(
 
 	// Process CRDs before other resources to ensure custom resource definitions
 	// are available if any rendered templates reference custom resources
-	crdObjects, err := r.processCRDs(chart, holder)
+	crdObjects, err := r.processCRDs(helmChart, holder)
 	if err != nil {
 		return nil, &RenderError{Chart: holder.Chart, ReleaseName: holder.ReleaseName, Err: err}
 	}

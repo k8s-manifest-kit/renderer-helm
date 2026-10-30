@@ -1,0 +1,3 @@
+config:
+  message: child-c-default-message
+  keep: child-c-default-keep

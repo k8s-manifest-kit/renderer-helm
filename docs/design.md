@@ -18,6 +18,22 @@ exclude sources before rendering. Source loading and chart discovery are lazy
 and synchronized per source, allowing independent sources to be loaded safely
 under concurrent renders.
 
+## Chart state
+
+Charts are loaded lazily and only the first successful load is kept. That
+loaded chart is an immutable source snapshot: it is never reread, refetched,
+or mutated. Every render copies the chart graph — preserving dependency order
+(which drives CRD and resource emission order), parent links, metadata, lock,
+default values, schemas, templates, files, and CRDs — and runs dependency
+processing, value coalescing, template rendering, and CRD extraction against
+the copy. File payloads are shared between copies because the render path only
+reads them.
+
+As a result, repeated and concurrent renders are independent: a render that
+disables, enables, or aliases a subchart cannot affect the output of any other
+render of the same renderer, and a request that is served from the output cache
+never mutates chart state.
+
 ## Values and rendering
 
 Source values are resolved for each render and merged with render-time

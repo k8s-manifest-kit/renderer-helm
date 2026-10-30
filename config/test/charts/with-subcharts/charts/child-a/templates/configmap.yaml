@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-child-a-config
+data:
+  message: {{ .Values.config.message | quote }}
+  keep: {{ .Values.config.keep | quote }}

@@ -1,0 +1,20 @@
+apiVersion: v2
+name: with-subcharts
+description: A parent chart with vendored subcharts for dependency processing tests
+type: application
+version: 1.0.0
+appVersion: "1.0"
+dependencies:
+  - name: child-a
+    version: "1.0.0"
+    condition: child-a.enabled
+    import-values:
+      - child: exports
+        parent: imported
+  - name: child-b
+    version: "1.0.0"
+    condition: child-b.enabled
+  - name: child-c
+    version: "1.0.0"
+    alias: child-c-alias
+    condition: child-c-alias.enabled

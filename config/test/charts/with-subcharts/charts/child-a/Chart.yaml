@@ -1,0 +1,6 @@
+apiVersion: v2
+name: child-a
+description: Subchart exporting values and carrying a CRD
+type: application
+version: 1.0.0
+appVersion: "1.0"

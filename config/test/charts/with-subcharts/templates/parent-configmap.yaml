@@ -1,0 +1,14 @@
+{{- $importedData := "not-imported" -}}
+{{- with .Values.imported -}}
+{{- $importedData = .data | default "not-imported" -}}
+{{- end -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-parent-config
+data:
+  greeting: {{ .Values.greeting | quote }}
+  overridden: {{ .Values.overridden | quote }}
+  nested-key: {{ .Values.nested.key | quote }}
+  nested-extra: {{ .Values.nested.extra | quote }}
+  imported-data: {{ $importedData | quote }}

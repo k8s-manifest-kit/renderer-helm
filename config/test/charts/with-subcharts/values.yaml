@@ -1,0 +1,5 @@
+greeting: parent-default-greeting
+overridden: parent-default-overridden
+nested:
+  key: parent-default-nested-key
+  extra: parent-default-nested-extra
