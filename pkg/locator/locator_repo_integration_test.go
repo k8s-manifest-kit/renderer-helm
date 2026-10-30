@@ -1,3 +1,5 @@
+//go:build integration
+
 package locator_test
 
 import (
@@ -19,7 +21,7 @@ func TestRepoLocator_Integration(t *testing.T) {
 		result, err := locator.Locate(t.Context(), &locator.Request{
 			Name:            "nginx",
 			RepoURL:         "https://charts.bitnami.com/bitnami",
-			Version:         "18.1.0",
+			Version:         bitnamiChartsNginxVersion,
 			RepositoryCache: t.TempDir(),
 		})
 		g.Expect(err).ToNot(HaveOccurred())
@@ -32,7 +34,7 @@ func TestRepoLocator_Integration(t *testing.T) {
 		g.Expect(err).ToNot(HaveOccurred())
 		g.Expect(meta).To(MatchFields(IgnoreExtras, Fields{
 			"Name":    Equal("nginx"),
-			"Version": Equal("18.1.0"),
+			"Version": Equal(bitnamiChartsNginxVersion),
 		}))
 	})
 

@@ -28,10 +28,19 @@ Run commands from this directory:
 
 ```bash
 make test
+make test/race
+make test/integration
 make fmt
 make lint
 make lint/fix
 make check
 ```
 
-Helm and registry tests may need network access. Use the checked-in test charts for deterministic tests where possible, unique valid release names, Gomega assertions, and `t.Context()`.
+Unit tests (`make test`, `make test/race`) are deterministic and offline:
+they only use the checked-in test charts, `fstest.MapFS`, and local
+`httptest` servers. Tests that contact live OCI registries or Helm
+repositories are guarded by the `integration` build tag and run through
+`make test/integration` (also linted via `make lint/integration`, part of
+`make check`). Pin exact chart versions in integration tests so they stay
+reproducible. Use unique valid release names, Gomega assertions, and
+`t.Context()`.

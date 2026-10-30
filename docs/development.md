@@ -2,11 +2,12 @@
 
 ## Prerequisites and commands
 
-Use Go 1.26.8. Helm chart tests may need a chart fixture or network access
-when they exercise remote repositories. The supported local workflow is:
+Use the Go version required by `go.mod`. The supported local workflow is:
 
 ```bash
 make test
+make test/race
+make test/integration
 make fmt
 make lint
 make lint/fix
@@ -14,6 +15,20 @@ make check
 ```
 
 The Makefile owns the tool versions and command details.
+
+## Unit and integration boundary
+
+Unit tests (`make test`, `make test/race`) never contact external
+registries or repositories. They render the checked-in test charts, use
+`fstest.MapFS` and local `httptest` servers, and must stay deterministic.
+
+Tests that exercise live OCI registries or Helm repositories are guarded
+by the `integration` build tag (`//go:build integration`) and only run
+through `make test/integration`, which executes every package with the
+tag enabled and `-count=1` so results are always fresh. Pin the chart
+inputs of these tests to exact published versions; verify a version still
+exists before updating it. The tagged files are linted by
+`make lint/integration`, which is part of `make check`.
 
 ## Package layout
 

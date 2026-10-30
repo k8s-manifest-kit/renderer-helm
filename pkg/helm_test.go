@@ -3,8 +3,6 @@ package helm_test
 import (
 	"context"
 	"errors"
-	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"sync"
@@ -14,7 +12,6 @@ import (
 	"github.com/rs/xid"
 
 	appsv1 "k8s.io/api/apps/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	"github.com/k8s-manifest-kit/engine/pkg/filter/meta/gvk"
 	"github.com/k8s-manifest-kit/engine/pkg/transformer/meta/labels"
@@ -32,37 +29,6 @@ const (
 
 //nolint:cyclop,goconst // Test function complexity and string repetition acceptable for readability
 func TestRenderer(t *testing.T) {
-
-	t.Run("should render chart from OCI registry", func(t *testing.T) {
-		g := NewWithT(t)
-		renderer, err := helm.New([]helm.Source{
-			{
-				Chart:       "oci://registry-1.docker.io/daprio/dapr-shared-chart",
-				ReleaseName: "test-release",
-				Values: helm.Values(map[string]any{
-					"shared": map[string]any{
-						"appId": "test-app",
-					},
-				}),
-			},
-		})
-		g.Expect(err).ToNot(HaveOccurred())
-
-		objects, err := renderer.Process(t.Context(), nil)
-		g.Expect(err).ToNot(HaveOccurred())
-		g.Expect(objects).ToNot(BeEmpty())
-
-		// Check that resources were rendered
-		found := false
-		for _, obj := range objects {
-			if obj.GetKind() == "Deployment" || obj.GetKind() == "Service" {
-				found = true
-
-				break
-			}
-		}
-		g.Expect(found).To(BeTrue(), "Should have rendered at least one Deployment or Service")
-	})
 
 	t.Run("should render chart from filesystem", func(t *testing.T) {
 		g := NewWithT(t)
@@ -589,7 +555,9 @@ func TestNew(t *testing.T) {
 		g := NewWithT(t)
 		renderer, err := helm.New([]helm.Source{
 			{
-				Chart:       "oci://registry-1.docker.io/non-existent/chart",
+				// Points at a local server so the lookup fails without
+				// contacting an external registry.
+				Chart:       newUnavailableRegistry(t),
 				ReleaseName: "test",
 			},
 		})
@@ -903,15 +871,18 @@ func BenchmarkHelmRenderWithCache(b *testing.B) {
 }
 
 func BenchmarkHelmRenderCacheMiss(b *testing.B) {
+	// Unique values per iteration force the default cache key to change,
+	// exercising the cache-miss path on every render.
 	renderer, err := helm.New(
 		[]helm.Source{
 			{
-				Chart:       "oci://registry-1.docker.io/daprio/dapr-shared-chart",
+				Chart:       testChartPath,
 				ReleaseName: "bench-miss",
 				Values: func(_ context.Context) (types.Values, error) {
 					return types.Values{
-						"shared": map[string]any{
-							"appId": xid.New().String(),
+						"replicaCount": 1,
+						"image": map[string]any{
+							"tag": xid.New().String(),
 						},
 					}, nil
 				},
@@ -942,12 +913,10 @@ func TestMetricsIntegration(t *testing.T) {
 		g := NewWithT(t)
 		renderer, err := helm.New([]helm.Source{
 			{
-				Chart:       "oci://registry-1.docker.io/daprio/dapr-shared-chart",
+				Chart:       testChartPath,
 				ReleaseName: "metrics-test",
 				Values: helm.Values(map[string]any{
-					"shared": map[string]any{
-						"appId": "metrics-app",
-					},
+					"replicaCount": 1,
 				}),
 			},
 		})
@@ -955,7 +924,7 @@ func TestMetricsIntegration(t *testing.T) {
 
 		objects, err := renderer.Process(t.Context(), nil)
 		g.Expect(err).ToNot(HaveOccurred())
-		g.Expect(objects).ToNot(BeEmpty())
+		g.Expect(objects).To(HaveLen(3))
 	})
 
 	t.Run("should implement Name() method", func(t *testing.T) {
@@ -983,12 +952,10 @@ func TestSourceAnnotations(t *testing.T) {
 		renderer, err := helm.New(
 			[]helm.Source{
 				{
-					Chart:       "oci://registry-1.docker.io/daprio/dapr-shared-chart",
+					Chart:       testChartPath,
 					ReleaseName: "annotations-test",
 					Values: helm.Values(map[string]any{
-						"shared": map[string]any{
-							"appId": "annotations-app",
-						},
+						"replicaCount": 1,
 					}),
 				},
 			},
@@ -998,7 +965,7 @@ func TestSourceAnnotations(t *testing.T) {
 
 		objects, err := renderer.Process(t.Context(), nil)
 		g.Expect(err).ToNot(HaveOccurred())
-		g.Expect(objects).ToNot(BeEmpty())
+		g.Expect(objects).To(HaveLen(3))
 
 		// Verify all objects have source annotations
 		for _, obj := range objects {
@@ -1010,7 +977,7 @@ func TestSourceAnnotations(t *testing.T) {
 			))
 			g.Expect(annotations).Should(HaveKeyWithValue(
 				types.AnnotationSourcePath,
-				"oci://registry-1.docker.io/daprio/dapr-shared-chart",
+				testChartPath,
 			))
 			g.Expect(annotations).Should(HaveKey(types.AnnotationSourceFile))
 			// File should be a template path
@@ -1022,12 +989,10 @@ func TestSourceAnnotations(t *testing.T) {
 		g := NewWithT(t)
 		renderer, err := helm.New([]helm.Source{
 			{
-				Chart:       "oci://registry-1.docker.io/daprio/dapr-shared-chart",
+				Chart:       testChartPath,
 				ReleaseName: "no-annotations-test",
 				Values: helm.Values(map[string]any{
-					"shared": map[string]any{
-						"appId": "no-annotations-app",
-					},
+					"replicaCount": 1,
 				}),
 			},
 		})
@@ -1035,7 +1000,7 @@ func TestSourceAnnotations(t *testing.T) {
 
 		objects, err := renderer.Process(t.Context(), nil)
 		g.Expect(err).ToNot(HaveOccurred())
-		g.Expect(objects).ToNot(BeEmpty())
+		g.Expect(objects).To(HaveLen(3))
 
 		// Verify no source annotations are present
 		for _, obj := range objects {
@@ -1512,124 +1477,6 @@ data:
 	})
 }
 
-func TestRendererRemoteSources(t *testing.T) {
-	t.Parallel()
-
-	t.Run("should render chart from OCI registry with correct content", func(t *testing.T) {
-		t.Parallel()
-		g := NewWithT(t)
-
-		renderer, err := helm.New(
-			[]helm.Source{{
-				Chart:          "oci://registry-1.docker.io/bitnamicharts/nginx",
-				ReleaseName:    xid.New().String(),
-				ReleaseVersion: "18.1.0",
-			}},
-			helm.WithRepositoryCache(t.TempDir()),
-		)
-		g.Expect(err).ToNot(HaveOccurred())
-
-		objects, err := renderer.Process(t.Context(), nil)
-		g.Expect(err).ToNot(HaveOccurred())
-		g.Expect(objects).ToNot(BeEmpty())
-
-		var deploymentFound bool
-
-		for _, obj := range objects {
-			gvk := obj.GroupVersionKind()
-			if gvk.Group == appsv1.GroupName && gvk.Kind == "Deployment" {
-				lbls := obj.GetLabels()
-				if lbls["app.kubernetes.io/name"] == "nginx" {
-					deploymentFound = true
-
-					break
-				}
-			}
-		}
-
-		g.Expect(deploymentFound).To(BeTrue(), "expected at least one Deployment with app.kubernetes.io/name=nginx")
-	})
-
-	t.Run("should render chart from Helm repository with correct content", func(t *testing.T) {
-		t.Parallel()
-		g := NewWithT(t)
-
-		renderer, err := helm.New(
-			[]helm.Source{{
-				Repo:           "https://charts.bitnami.com/bitnami",
-				Chart:          "nginx",
-				ReleaseName:    xid.New().String(),
-				ReleaseVersion: "18.1.0",
-			}},
-			helm.WithRepositoryCache(t.TempDir()),
-		)
-		g.Expect(err).ToNot(HaveOccurred())
-
-		objects, err := renderer.Process(t.Context(), nil)
-		g.Expect(err).ToNot(HaveOccurred())
-		g.Expect(objects).ToNot(BeEmpty())
-
-		var deploymentFound bool
-
-		for _, obj := range objects {
-			gvk := obj.GroupVersionKind()
-			if gvk.Group == appsv1.GroupName && gvk.Kind == "Deployment" {
-				lbls := obj.GetLabels()
-				if lbls["app.kubernetes.io/name"] == "nginx" {
-					deploymentFound = true
-
-					break
-				}
-			}
-		}
-
-		g.Expect(deploymentFound).To(BeTrue(), "expected at least one Deployment with app.kubernetes.io/name=nginx")
-	})
-
-	t.Run("OCI and Repo should produce identical resource sets for same chart version", func(t *testing.T) {
-		t.Parallel()
-		g := NewWithT(t)
-
-		releaseName := xid.New().String()
-
-		ociRenderer, err := helm.New(
-			[]helm.Source{{
-				Chart:          "oci://registry-1.docker.io/bitnamicharts/nginx",
-				ReleaseName:    releaseName,
-				ReleaseVersion: "18.1.0",
-			}},
-			helm.WithRepositoryCache(t.TempDir()),
-		)
-		g.Expect(err).ToNot(HaveOccurred())
-
-		repoRenderer, err := helm.New(
-			[]helm.Source{{
-				Repo:           "https://charts.bitnami.com/bitnami",
-				Chart:          "nginx",
-				ReleaseName:    releaseName,
-				ReleaseVersion: "18.1.0",
-			}},
-			helm.WithRepositoryCache(t.TempDir()),
-		)
-		g.Expect(err).ToNot(HaveOccurred())
-
-		ociObjects, err := ociRenderer.Process(t.Context(), nil)
-		g.Expect(err).ToNot(HaveOccurred())
-
-		repoObjects, err := repoRenderer.Process(t.Context(), nil)
-		g.Expect(err).ToNot(HaveOccurred())
-
-		g.Expect(ociObjects).To(HaveLen(len(repoObjects)),
-			"OCI and Repo should produce the same number of resources for the same chart version")
-
-		ociIDs := objectIdentities(ociObjects)
-		repoIDs := objectIdentities(repoObjects)
-
-		g.Expect(ociIDs).To(ConsistOf(repoIDs),
-			"OCI and Repo should produce the same resource identities (GVK + namespace/name)")
-	})
-}
-
 func TestFilesystemErrors(t *testing.T) {
 	t.Run("should reject a missing filesystem chart root", func(t *testing.T) {
 		g := NewWithT(t)
@@ -1666,63 +1513,4 @@ func TestFilesystemErrors(t *testing.T) {
 		g.Expect(err).To(HaveOccurred())
 		g.Expect(err.Error()).To(ContainSubstring("Chart.yaml file is missing"))
 	})
-}
-
-func objectIdentities(objects []unstructured.Unstructured) []string {
-	ids := make([]string, 0, len(objects))
-	for _, obj := range objects {
-		objGVK := obj.GroupVersionKind()
-		ids = append(ids, fmt.Sprintf("%s/%s/%s/%s/%s",
-			objGVK.Group, objGVK.Version, objGVK.Kind,
-			obj.GetNamespace(), obj.GetName()))
-	}
-
-	return ids
-}
-
-func mapChartFS(t *testing.T) fstest.MapFS {
-	t.Helper()
-
-	diskFS := os.DirFS(testChartPath)
-	chartFS := fstest.MapFS{}
-	err := fs.WalkDir(diskFS, ".", func(path string, entry fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if entry.IsDir() {
-			return nil
-		}
-
-		data, err := fs.ReadFile(diskFS, path)
-		if err != nil {
-			return fmt.Errorf("failed to read %q: %w", path, err)
-		}
-
-		info, err := entry.Info()
-		if err != nil {
-			return fmt.Errorf("failed to stat %q: %w", path, err)
-		}
-
-		chartFS["chart/"+path] = &fstest.MapFile{
-			Data:    data,
-			Mode:    info.Mode(),
-			ModTime: info.ModTime(),
-		}
-
-		return nil
-	})
-	if err != nil {
-		t.Fatalf("failed to build chart filesystem: %v", err)
-	}
-
-	chartFS["chart/.helmignore"] = &fstest.MapFile{
-		Data: []byte("templates/ignored.yaml\n"),
-		Mode: 0o644,
-	}
-	chartFS["chart/templates/ignored.yaml"] = &fstest.MapFile{
-		Data: []byte("{{ invalid template"),
-		Mode: 0o644,
-	}
-
-	return chartFS
 }

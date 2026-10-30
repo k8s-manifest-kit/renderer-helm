@@ -46,3 +46,23 @@ jobs:
       - name: Run tests
         run: |
           make test
+
+      - name: Run tests with race detector
+        run: |
+          make test/race
+
+  integration:
+    name: Integration Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Run integration tests
+        run: |
+          make test/integration

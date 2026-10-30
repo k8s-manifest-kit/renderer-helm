@@ -45,6 +45,14 @@ fmt:
 test:
 	go test -v ./...
 
+.PHONY: test/race
+test/race:
+	go test -race ./...
+
+.PHONY: test/integration
+test/integration:
+	go test -count=1 -tags integration ./...
+
 .PHONY: bench
 bench:
 	go test -bench=. -benchmem ./... 
@@ -93,12 +101,16 @@ lint:
 lint/fix:
 	@$(GOLANGCI) run --config .golangci.yml --timeout $(LINT_TIMEOUT) --fix
 
+.PHONY: lint/integration
+lint/integration:
+	@$(GOLANGCI) run --config .golangci.yml --timeout $(LINT_TIMEOUT) --build-tags integration
+
 .PHONY: vulncheck
 vulncheck:
 	@$(GOVULNCHECK) ./...
 
 .PHONY: check
-check: lint vulncheck
+check: lint lint/integration vulncheck
 
 LOCALBIN ?= $(shell pwd)/bin
 $(LOCALBIN):
