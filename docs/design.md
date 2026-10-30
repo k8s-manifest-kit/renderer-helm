@@ -62,3 +62,22 @@ render content cache. The shared cache option accepts `cache.WithTTL` and
 `cache.WithKeyFunc`. Cached render output is cloned at cache boundaries.
 
 See [`../AGENTS.md`](../AGENTS.md) and [`development.md`](development.md).
+
+## OCI content integrity
+
+OCI pulls verify every consumed document against its descriptor before it is
+decoded or returned as a chart: the root manifest or index, each probed index
+candidate, and the selected chart layer are downloaded and checked for an
+exact size match and a matching digest, regardless of the
+`Docker-Content-Digest` headers the registry serves. Substituted bytes
+(including same-length, syntactically valid substitutions), truncated or
+extended bodies, invalid or unsupported digests, and invalid descriptor sizes
+are rejected before any content is used. Digest-pinned pulls (`PullDigest`
+and `oci://` references with an embedded digest) additionally require the
+resolved root descriptor to match the requested digest.
+
+Sizes are validated on the descriptor before any bytes are fetched:
+manifests and indexes are capped at 4 MiB and chart layers at 256 MiB, so a
+hostile descriptor cannot drive large reads or allocations. This is byte
+integrity verification against registry-served descriptors — it is not
+publisher, signature, or provenance verification.

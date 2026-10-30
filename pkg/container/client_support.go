@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"slices"
 	"strings"
 
@@ -12,6 +11,7 @@ import (
 	"github.com/distribution/reference"
 	godigest "github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	"oras.land/oras-go/v2/content"
 	"oras.land/oras-go/v2/registry/remote"
 	"oras.land/oras-go/v2/registry/remote/auth"
 	"oras.land/oras-go/v2/registry/remote/credentials"
@@ -23,6 +23,12 @@ const (
 	dockerManifestListMediaType = "application/vnd.docker.distribution.manifest.list.v2+json"
 
 	maxBlobSize = 256 << 20 // 256 MiB hard upper bound for blob downloads
+
+	// maxMetadataSize bounds manifest and index downloads. Metadata
+	// documents are small; the cap keeps a hostile descriptor from driving
+	// large metadata reads or allocations before verification can reject
+	// its content.
+	maxMetadataSize = 4 << 20 // 4 MiB
 )
 
 // computeCredentials returns a credential function for OCI registry auth.
@@ -70,7 +76,7 @@ func listTags(ctx context.Context, repo *remote.Repository) ([]string, error) {
 }
 
 func fetchManifest(ctx context.Context, repo *remote.Repository, desc ocispec.Descriptor) (*resolvedArtifact, error) {
-	manifest, err := fetch[ocispec.Manifest](ctx, repo, desc)
+	manifest, err := fetchJSON[ocispec.Manifest](ctx, repo, desc)
 	if err != nil {
 		return nil, fmt.Errorf("unable to fetch manifest: %w", err)
 	}
@@ -78,13 +84,54 @@ func fetchManifest(ctx context.Context, repo *remote.Repository, desc ocispec.De
 	return &resolvedArtifact{desc: desc, manifest: manifest}, nil
 }
 
+// fetchBlob downloads the chart layer described by desc, verifying the bytes
+// against the descriptor before returning them.
 func fetchBlob(ctx context.Context, repo *remote.Repository, desc ocispec.Descriptor) ([]byte, error) {
-	if desc.Size <= 0 {
-		return nil, fmt.Errorf("%w: %s reports size %d", ErrInvalidDescriptorSize, desc.Digest, desc.Size)
+	if err := checkDescriptorSize(desc, maxBlobSize, ErrBlobTooLarge); err != nil {
+		return nil, err
 	}
 
-	if desc.Size > maxBlobSize {
-		return nil, fmt.Errorf("%w: %s is %d bytes (max %d)", ErrBlobTooLarge, desc.Digest, desc.Size, maxBlobSize)
+	return fetchVerified(ctx, repo, desc)
+}
+
+// fetchManifestBytes downloads the raw bytes of the manifest or index
+// described by desc, verifying them against the descriptor. Metadata is
+// bounded well below the blob limit so a hostile descriptor cannot drive
+// large metadata reads.
+func fetchManifestBytes(ctx context.Context, repo *remote.Repository, desc ocispec.Descriptor) ([]byte, error) {
+	if err := checkDescriptorSize(desc, maxMetadataSize, ErrManifestTooLarge); err != nil {
+		return nil, err
+	}
+
+	return fetchVerified(ctx, repo, desc)
+}
+
+// fetchJSON downloads the JSON document described by desc, verifying the
+// body against the descriptor before decoding it.
+func fetchJSON[T any](ctx context.Context, repo *remote.Repository, desc ocispec.Descriptor) (T, error) {
+	var zero T
+
+	data, err := fetchManifestBytes(ctx, repo, desc)
+	if err != nil {
+		return zero, err
+	}
+
+	var target T
+	if err := json.Unmarshal(data, &target); err != nil {
+		return zero, fmt.Errorf("decode %s: %w", desc.Digest, err)
+	}
+
+	return target, nil
+}
+
+// fetchVerified downloads the content described by desc and returns its
+// bytes only after they verify against the descriptor's digest and exact
+// size. The response body is closed on success and error. The caller must
+// bound desc.Size first: the read is capped at desc.Size, so a validated
+// bound also bounds allocation.
+func fetchVerified(ctx context.Context, repo *remote.Repository, desc ocispec.Descriptor) ([]byte, error) {
+	if err := desc.Digest.Validate(); err != nil {
+		return nil, fmt.Errorf("%w: %s: %w", ErrInvalidDigest, desc.Digest, err)
 	}
 
 	rc, err := repo.Fetch(ctx, desc)
@@ -93,29 +140,30 @@ func fetchBlob(ctx context.Context, repo *remote.Repository, desc ocispec.Descri
 	}
 	defer func() { _ = rc.Close() }()
 
-	data, err := io.ReadAll(io.LimitReader(rc, desc.Size))
+	// content.ReadAll verifies the exact size and digest of the body while
+	// capping the initial buffer allocation, so a hostile descriptor cannot
+	// force a huge allocation before verification rejects its content.
+	data, err := content.ReadAll(rc, desc)
 	if err != nil {
-		return nil, fmt.Errorf("read %s: %w", desc.Digest, err)
+		return nil, fmt.Errorf("%w: %s: %w", ErrContentMismatch, desc.Digest, err)
 	}
 
 	return data, nil
 }
 
-func fetch[T any](ctx context.Context, repo *remote.Repository, desc ocispec.Descriptor) (T, error) {
-	var zero T
-
-	rc, err := repo.Fetch(ctx, desc)
-	if err != nil {
-		return zero, fmt.Errorf("fetch %s: %w", desc.Digest, err)
-	}
-	defer func() { _ = rc.Close() }()
-
-	var target T
-	if err := json.NewDecoder(rc).Decode(&target); err != nil {
-		return zero, fmt.Errorf("decode %s: %w", desc.Digest, err)
+// checkDescriptorSize rejects a descriptor whose size is unusable or exceeds
+// maxSize, before any bytes are fetched or allocated. tooLarge selects the
+// sentinel error reported for the max violation.
+func checkDescriptorSize(desc ocispec.Descriptor, maxSize int64, tooLarge error) error {
+	if desc.Size <= 0 {
+		return fmt.Errorf("%w: %s reports size %d", ErrInvalidDescriptorSize, desc.Digest, desc.Size)
 	}
 
-	return target, nil
+	if desc.Size > maxSize {
+		return fmt.Errorf("%w: %s is %d bytes (max %d)", tooLarge, desc.Digest, desc.Size, maxSize)
+	}
+
+	return nil
 }
 
 func isIndexType(mediaType string) bool {

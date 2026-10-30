@@ -51,6 +51,7 @@ func NewClient(ref string, opts ...ClientOption) (*Client, error) {
 
 // Pull fetches the Helm chart .tgz bytes for the given tag.
 // Only the chart layer is downloaded; config and provenance layers are skipped.
+// Every downloaded document is verified against its descriptor.
 func (c *Client) Pull(ctx context.Context, tag string) ([]byte, error) {
 	if tag == "" {
 		return nil, fmt.Errorf("%w: %q", ErrEmptyTag, c.ref)
@@ -58,11 +59,13 @@ func (c *Client) Pull(ctx context.Context, tag string) ([]byte, error) {
 
 	fullRef := c.ref + ":" + tag
 
-	return c.fetchChart(ctx, fullRef)
+	return c.fetchChart(ctx, fullRef, "")
 }
 
 // PullDigest fetches the Helm chart .tgz bytes for the given manifest digest,
-// ensuring reproducible pulls that are immune to tag mutation.
+// ensuring reproducible pulls that are immune to tag mutation. The resolved
+// root descriptor must match the requested digest, and every downloaded
+// body is verified against its descriptor.
 func (c *Client) PullDigest(ctx context.Context, dgst godigest.Digest) ([]byte, error) {
 	if err := dgst.Validate(); err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrInvalidDigest, err)
@@ -70,7 +73,7 @@ func (c *Client) PullDigest(ctx context.Context, dgst godigest.Digest) ([]byte, 
 
 	fullRef := c.ref + "@" + dgst.String()
 
-	return c.fetchChart(ctx, fullRef)
+	return c.fetchChart(ctx, fullRef, dgst)
 }
 
 // Tags returns all tags from the repository, converting OCI tag underscores
@@ -92,8 +95,11 @@ func (c *Client) ResolveTag(ctx context.Context, version string) (string, error)
 	return resolveTag(ctx, c.originalRef, version, c.Tags)
 }
 
-func (c *Client) fetchChart(ctx context.Context, fullRef string) ([]byte, error) {
-	resolved, err := c.resolveManifest(ctx, fullRef)
+// fetchChart resolves fullRef and downloads its chart layer. When rootDigest
+// is set, the resolved root descriptor must match it exactly, anchoring
+// digest-pinned pulls to the requested content.
+func (c *Client) fetchChart(ctx context.Context, fullRef string, rootDigest godigest.Digest) ([]byte, error) {
+	resolved, err := c.resolveManifest(ctx, fullRef, rootDigest)
 	if err != nil {
 		return nil, err
 	}
@@ -111,13 +117,26 @@ func (c *Client) fetchChart(ctx context.Context, fullRef string) ([]byte, error)
 	return data, nil
 }
 
-// resolveManifest resolves the reference and fetches its manifest.
-// If the descriptor points to an OCI image index (manifest list), it
-// dereferences the index to the first entry that contains a Helm chart layer.
-func (c *Client) resolveManifest(ctx context.Context, fullRef string) (*resolvedArtifact, error) {
+// resolveManifest resolves the reference and fetches its manifest, verifying
+// the manifest bytes against the resolved descriptor. If the descriptor
+// points to an OCI image index (manifest list), it dereferences the index to
+// the first entry that contains a Helm chart layer. When rootDigest is set,
+// the resolved root descriptor must match it exactly.
+func (c *Client) resolveManifest(
+	ctx context.Context,
+	fullRef string,
+	rootDigest godigest.Digest,
+) (*resolvedArtifact, error) {
 	desc, err := c.repo.Resolve(ctx, fullRef)
 	if err != nil {
 		return nil, fmt.Errorf("unable to resolve %q: %w", fullRef, err)
+	}
+
+	if rootDigest != "" && desc.Digest != rootDigest {
+		return nil, fmt.Errorf(
+			"%w: %q resolved to %s, want %s",
+			ErrContentMismatch, fullRef, desc.Digest, rootDigest,
+		)
 	}
 
 	if !isIndexType(desc.MediaType) {
@@ -129,7 +148,7 @@ func (c *Client) resolveManifest(ctx context.Context, fullRef string) (*resolved
 		return resolved, nil
 	}
 
-	idx, err := fetch[ocispec.Index](ctx, c.repo, desc)
+	idx, err := fetchJSON[ocispec.Index](ctx, c.repo, desc)
 	if err != nil {
 		return nil, fmt.Errorf("unable to fetch index for %q: %w", fullRef, err)
 	}

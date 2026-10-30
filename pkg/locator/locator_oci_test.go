@@ -1,10 +1,13 @@
 package locator_test
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strconv"
 	"testing"
 
@@ -139,6 +142,37 @@ func TestOCILocator_DigestPullEmptyBlob(t *testing.T) {
 	g.Expect(err).To(MatchError(ContainSubstring(container.ErrInvalidDescriptorSize.Error())))
 }
 
+func TestOCILocator_IntegrityFailure(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	// A registry serving chart bytes that do not match the advertised digest
+	// must fail the pull, and no chart may be cached from unverifiable
+	// content.
+	chartContent := []byte("locator-integrity-chart")
+	tampered := bytes.Clone(chartContent)
+	tampered[0] ^= 0xff
+
+	srv := newMockOCIRegistryServingChart(t, chartContent, tampered)
+
+	cacheDir := t.TempDir()
+
+	oci := &locator.OCI{
+		Ref:       fmt.Sprintf("oci://%s@%s", srv.ref, srv.manifestDigest),
+		CacheDir:  cacheDir,
+		PlainHTTP: true,
+	}
+
+	_, err := oci.Locate(t.Context())
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err).To(MatchError(ContainSubstring("unable to pull chart by digest")))
+	g.Expect(errors.Is(err, container.ErrContentMismatch)).To(BeTrue())
+
+	entries, readErr := os.ReadDir(cacheDir)
+	g.Expect(readErr).ToNot(HaveOccurred())
+	g.Expect(entries).To(BeEmpty())
+}
+
 // ---------------------------------------------------------------------------
 // Mock OCI registry helper
 // ---------------------------------------------------------------------------
@@ -154,6 +188,16 @@ type mockOCIServer struct {
 // tests (e.g. digest-pin). The full OCI client test suite and its more elaborate
 // mocks live in pkg/container.
 func newMockOCIRegistry(t *testing.T, chartContent []byte) *mockOCIServer {
+	t.Helper()
+
+	return newMockOCIRegistryServingChart(t, chartContent, chartContent)
+}
+
+// newMockOCIRegistryServingChart builds a mock OCI registry whose manifest
+// descriptors advertise chartContent, while the blob endpoint serves
+// servedChart for the chart digest. Serving divergent bytes lets tests
+// exercise content verification through the public locator path.
+func newMockOCIRegistryServingChart(t *testing.T, chartContent []byte, servedChart []byte) *mockOCIServer {
 	t.Helper()
 
 	chartDigest := digest.FromBytes(chartContent)
@@ -182,7 +226,7 @@ func newMockOCIRegistry(t *testing.T, chartContent []byte) *mockOCIServer {
 	manifestDigest := digest.FromBytes(manifestBytes)
 
 	blobs := map[digest.Digest][]byte{
-		chartDigest:  chartContent,
+		chartDigest:  servedChart,
 		configDigest: configContent,
 	}
 

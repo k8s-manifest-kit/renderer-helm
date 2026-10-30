@@ -16,7 +16,8 @@ var ErrEmptyIndex = errors.New("OCI index contains no manifests")
 // ErrEmptyTag is returned when Pull is called with an empty tag.
 var ErrEmptyTag = errors.New("tag must not be empty")
 
-// ErrInvalidDigest is returned when PullDigest is called with a malformed digest.
+// ErrInvalidDigest is returned when a digest is malformed, either one
+// passed to PullDigest or one recorded in a content descriptor.
 var ErrInvalidDigest = errors.New("invalid digest")
 
 // ErrRefContainsTag is returned when an OCI ref already contains an embedded
@@ -38,6 +39,17 @@ var ErrInvalidDescriptorSize = errors.New("descriptor has invalid size")
 
 // ErrBlobTooLarge is returned when a blob exceeds the maximum allowed size.
 var ErrBlobTooLarge = errors.New("blob exceeds maximum allowed size")
+
+// ErrManifestTooLarge is returned when a manifest or index descriptor
+// exceeds the maximum allowed metadata size.
+var ErrManifestTooLarge = errors.New("manifest exceeds maximum allowed size")
+
+// ErrContentMismatch is returned when downloaded OCI content fails
+// verification against its descriptor — the bytes hash to a different
+// digest, or the body is shorter or longer than the descriptor size — or
+// when a digest-pinned reference resolves to a different digest than the
+// one requested.
+var ErrContentMismatch = errors.New("OCI content does not match its descriptor")
 
 type resolvedArtifact struct {
 	desc     ocispec.Descriptor
