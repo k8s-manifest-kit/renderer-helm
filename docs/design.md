@@ -27,7 +27,18 @@ or mutated. Every render copies the chart graph — preserving dependency order
 default values, schemas, templates, files, and CRDs — and runs dependency
 processing, value coalescing, template rendering, and CRD extraction against
 the copy. File payloads are shared between copies because the render path only
-reads them.
+reads them. Dependency entries are copied with independently mutable `Tags`
+and `ImportValues`: their nested data stays reachable from the copied chart
+during rendering (templates can mutate nested metadata through Sprig
+functions such as `set`), so sharing them would let a render mutate the
+source snapshot.
+
+The copy is made before dependency processing runs, because processing is
+destructive: it rewrites dependency entries in place and removes disabled
+subcharts from the graph and the chart metadata. A lock can serialize
+renders, but it cannot restore a graph after processing has removed
+dependencies, so isolation comes from copying the pristine snapshot rather
+than from synchronization.
 
 As a result, repeated and concurrent renders are independent: a render that
 disables, enables, or aliases a subchart cannot affect the output of any other

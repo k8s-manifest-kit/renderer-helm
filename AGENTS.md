@@ -42,5 +42,7 @@ they only use the checked-in test charts, `fstest.MapFS`, and local
 repositories are guarded by the `integration` build tag and run through
 `make test/integration` (also linted via `make lint/integration`, part of
 `make check`). Pin exact chart versions in integration tests so they stay
-reproducible. Use unique valid release names, Gomega assertions, and
-`t.Context()`.
+reproducible, except tests that deliberately exercise version discovery
+or semver constraints. Use unique valid release names, Gomega assertions,
+and `t.Context()`. See [Development](docs/development.md) for code, test,
+concurrency, and cache-evidence conventions.
