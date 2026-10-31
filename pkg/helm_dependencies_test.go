@@ -258,6 +258,36 @@ func TestRenderer_ValuesPrecedence(t *testing.T) {
 	})
 }
 
+// TestRenderer_ImportValuesSnapshotIsolation covers the nested dependency
+// metadata that stays reachable from templates: Helm exposes chart metadata
+// as maps sharing references with the chart struct, so a template can mutate
+// a dependency's import-values entry in place (here via sprig set). The
+// renderer must give every render its own copy so the mutation never reaches
+// the pristine first-loaded chart snapshot.
+func TestRenderer_ImportValuesSnapshotIsolation(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
+
+	renderer, err := helm.New([]helm.Source{{
+		Chart:               importValuesProbePath,
+		ReleaseName:         "import-values-probe",
+		ProcessDependencies: false,
+	}})
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// The probe template records the original import-values entry and then
+	// overwrites it. The first render reads the pristine value...
+	firstObjects, err := renderer.Process(t.Context(), nil)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(configMapData(g, findConfigMap(firstObjects, "import-values-probe"))["child"]).To(Equal("exports"))
+
+	// ...and so must every later render: the first render's in-place
+	// mutation must stay confined to its own chart copy.
+	secondObjects, err := renderer.Process(t.Context(), nil)
+	g.Expect(err).ToNot(HaveOccurred())
+	g.Expect(configMapData(g, findConfigMap(secondObjects, "import-values-probe"))["child"]).To(Equal("exports"))
+}
+
 // TestRenderer_DependencyAlias covers a dependency referenced through an
 // alias: the subchart renders once, under the alias values namespace, while
 // keeping its template identity.

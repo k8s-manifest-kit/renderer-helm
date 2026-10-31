@@ -74,7 +74,10 @@ func copyChartLock(src *chart.Lock) *chart.Lock {
 // copyChartDependencies copies the dependency entries so in-place edits during
 // dependency processing cannot reach the source snapshot. A nil slice stays
 // nil: Helm distinguishes charts without dependencies from charts with an
-// empty dependency list.
+// empty dependency list. Tags and ImportValues are deep-copied because their
+// nested data stays reachable from the copied chart (for example through
+// chart metadata during rendering), so sharing them would let a render
+// mutate the source snapshot.
 func copyChartDependencies(src []*chart.Dependency) []*chart.Dependency {
 	if src == nil {
 		return nil
@@ -84,8 +87,25 @@ func copyChartDependencies(src []*chart.Dependency) []*chart.Dependency {
 	for i, dependency := range src {
 		if dependency != nil {
 			dependencyCopy := *dependency
+			dependencyCopy.Tags = slices.Clone(dependency.Tags)
+			dependencyCopy.ImportValues = copyImportValues(dependency.ImportValues)
 			dst[i] = &dependencyCopy
 		}
+	}
+
+	return dst
+}
+
+// copyImportValues deep-copies the arbitrary JSON-like import-values entries.
+// A nil slice stays nil.
+func copyImportValues(src []any) []any {
+	if src == nil {
+		return nil
+	}
+
+	dst := make([]any, len(src))
+	for i, value := range src {
+		dst[i] = maps.DeepCloneValue(value)
 	}
 
 	return dst

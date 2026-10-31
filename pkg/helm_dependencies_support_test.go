@@ -14,6 +14,8 @@ import (
 
 const withSubchartsPath = "../config/test/charts/with-subcharts"
 
+const importValuesProbePath = "../config/test/charts/import-values-probe"
+
 // Values baked into the with-subcharts fixture.
 const (
 	parentDefaultGreeting   = "parent-default-greeting"

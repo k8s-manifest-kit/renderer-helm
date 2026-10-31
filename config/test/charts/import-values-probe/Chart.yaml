@@ -1,0 +1,9 @@
+apiVersion: v2
+name: import-values-probe
+description: Declares a map-form import-values entry used by snapshot-isolation tests.
+version: 0.1.0
+dependencies:
+  - name: child
+    version: 0.1.0
+    import-values:
+      - child: exports

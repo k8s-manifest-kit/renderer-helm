@@ -1,0 +1,12 @@
+{{- $dependency := index .Chart.Dependencies 0 }}
+{{- $importValues := index $dependency.ImportValues 0 }}
+{{- $original := index $importValues "child" }}
+{{- /* Mutate the import-values entry in place: chart metadata is exposed to
+templates as maps that share nested references with the chart struct. */ -}}
+{{- $_ := set $importValues "child" "poison" }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: import-values-probe
+data:
+  child: {{ $original }}
