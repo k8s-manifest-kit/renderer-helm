@@ -2,12 +2,12 @@ package helm
 
 import (
 	"github.com/k8s-manifest-kit/engine/pkg/types"
-	"github.com/k8s-manifest-kit/pkg/util"
 	"github.com/k8s-manifest-kit/pkg/util/cache"
+	"github.com/k8s-manifest-kit/pkg/util/option"
 )
 
 // RendererOption is a generic option for RendererOptions.
-type RendererOption = util.Option[RendererOptions]
+type RendererOption = option.Option[RendererOptions]
 
 // RendererOptions is a struct-based option that can set multiple renderer options at once.
 type RendererOptions struct {
@@ -85,14 +85,14 @@ func (opts RendererOptions) ApplyTo(target *RendererOptions) {
 
 // WithFilter adds a renderer-specific filter to this Helm renderer's processing chain.
 func WithFilter(f types.Filter) RendererOption {
-	return util.FunctionalOption[RendererOptions](func(opts *RendererOptions) {
+	return option.FunctionalOption[RendererOptions](func(opts *RendererOptions) {
 		opts.Filters = append(opts.Filters, f)
 	})
 }
 
 // WithTransformer adds a renderer-specific transformer to this Helm renderer's processing chain.
 func WithTransformer(t types.Transformer) RendererOption {
-	return util.FunctionalOption[RendererOptions](func(opts *RendererOptions) {
+	return option.FunctionalOption[RendererOptions](func(opts *RendererOptions) {
 		opts.Transformers = append(opts.Transformers, t)
 	})
 }
@@ -100,7 +100,7 @@ func WithTransformer(t types.Transformer) RendererOption {
 // WithPostRenderer adds a renderer-specific post-renderer to this Helm renderer's processing chain.
 // Post-renderers run after all sources have been rendered and combined, after Filters and Transformers.
 func WithPostRenderer(p types.PostRenderer) RendererOption {
-	return util.FunctionalOption[RendererOptions](func(opts *RendererOptions) {
+	return option.FunctionalOption[RendererOptions](func(opts *RendererOptions) {
 		opts.PostRenderers = append(opts.PostRenderers, p)
 	})
 }
@@ -109,35 +109,35 @@ func WithPostRenderer(p types.PostRenderer) RendererOption {
 // Source selectors are evaluated before rendering each source. If any selector
 // returns false, the source is skipped entirely.
 func WithSourceSelector(s SourceSelector) RendererOption {
-	return util.FunctionalOption[RendererOptions](func(opts *RendererOptions) {
+	return option.FunctionalOption[RendererOptions](func(opts *RendererOptions) {
 		opts.SourceSelectors = append(opts.SourceSelectors, s)
 	})
 }
 
 // WithRepositoryConfig sets the path to the repositories file.
 func WithRepositoryConfig(path string) RendererOption {
-	return util.FunctionalOption[RendererOptions](func(opts *RendererOptions) {
+	return option.FunctionalOption[RendererOptions](func(opts *RendererOptions) {
 		opts.RepositoryConfig = path
 	})
 }
 
 // WithRepositoryCache sets the path to the repository cache directory.
 func WithRepositoryCache(path string) RendererOption {
-	return util.FunctionalOption[RendererOptions](func(opts *RendererOptions) {
+	return option.FunctionalOption[RendererOptions](func(opts *RendererOptions) {
 		opts.RepositoryCache = path
 	})
 }
 
 // WithContentCache sets the path to the content-addressable cache directory.
 func WithContentCache(path string) RendererOption {
-	return util.FunctionalOption[RendererOptions](func(opts *RendererOptions) {
+	return option.FunctionalOption[RendererOptions](func(opts *RendererOptions) {
 		opts.ContentCache = path
 	})
 }
 
 // WithCache enables render result caching with the specified options.
 func WithCache(opts ...cache.Option) RendererOption {
-	return util.FunctionalOption[RendererOptions](func(rendererOpts *RendererOptions) {
+	return option.FunctionalOption[RendererOptions](func(rendererOpts *RendererOptions) {
 		if rendererOpts.CacheOptions == nil {
 			rendererOpts.CacheOptions = &cache.Options{}
 		}
@@ -150,28 +150,28 @@ func WithCache(opts ...cache.Option) RendererOption {
 
 // WithSourceAnnotations enables or disables automatic addition of source tracking annotations.
 func WithSourceAnnotations(enabled bool) RendererOption {
-	return util.FunctionalOption[RendererOptions](func(opts *RendererOptions) {
+	return option.FunctionalOption[RendererOptions](func(opts *RendererOptions) {
 		opts.SourceAnnotations = enabled
 	})
 }
 
 // WithContentHash enables or disables automatic addition of a SHA-256 content hash annotation.
 func WithContentHash(enabled bool) RendererOption {
-	return util.FunctionalOption[RendererOptions](func(opts *RendererOptions) {
+	return option.FunctionalOption[RendererOptions](func(opts *RendererOptions) {
 		opts.ContentHash = enabled
 	})
 }
 
 // WithLintMode enables or disables lint mode during template rendering.
 func WithLintMode(enabled bool) RendererOption {
-	return util.FunctionalOption[RendererOptions](func(opts *RendererOptions) {
+	return option.FunctionalOption[RendererOptions](func(opts *RendererOptions) {
 		opts.LintMode = enabled
 	})
 }
 
 // WithStrict enables or disables strict template rendering mode.
 func WithStrict(enabled bool) RendererOption {
-	return util.FunctionalOption[RendererOptions](func(opts *RendererOptions) {
+	return option.FunctionalOption[RendererOptions](func(opts *RendererOptions) {
 		opts.Strict = enabled
 	})
 }

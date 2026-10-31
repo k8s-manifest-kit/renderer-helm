@@ -45,9 +45,16 @@ behavior under test. The tagged files are linted by
 - `pkg/helm.go` — source model and renderer orchestration.
 - `pkg/helm_option.go` — renderer options and defaults.
 - `pkg/helm_support.go` — chart loading, decoding, metadata, and hashes.
+- `pkg/helm_fs.go` — filesystem chart loading helpers.
+- `pkg/helm_cache.go` — output-cache construction and cache keys.
 - `pkg/helm_chart_copy.go` — render-scoped copies of the loaded chart graph.
 - `pkg/locator/` — chart and repository location handling.
 - `pkg/container/` — registry/container client support.
+
+Renderer and container-client options are typed by the shared
+`github.com/k8s-manifest-kit/pkg/util/option` package. The layout follows
+the shared [`project-layout.md`](../../docs/project-layout.md) convention
+(workspace navigation).
 
 Keep chart loading lazy and preserve per-source synchronization. Values
 functions are evaluated with the render context and their errors should retain

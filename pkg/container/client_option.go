@@ -3,11 +3,11 @@ package container
 import (
 	"oras.land/oras-go/v2/registry/remote/auth"
 
-	"github.com/k8s-manifest-kit/pkg/util"
+	"github.com/k8s-manifest-kit/pkg/util/option"
 )
 
 // ClientOption is a functional option for the OCI Client.
-type ClientOption = util.Option[ClientOptions]
+type ClientOption = option.Option[ClientOptions]
 
 // ClientOptions holds configuration for the OCI registry client.
 type ClientOptions struct {
@@ -28,7 +28,7 @@ func (opts ClientOptions) ApplyTo(target *ClientOptions) {
 
 // WithCredential sets the authentication credentials for the OCI client.
 func WithCredential(username string, password string) ClientOption {
-	return util.FunctionalOption[ClientOptions](func(opts *ClientOptions) {
+	return option.FunctionalOption[ClientOptions](func(opts *ClientOptions) {
 		opts.credential = &auth.Credential{
 			Username: username,
 			Password: password,
@@ -38,7 +38,7 @@ func WithCredential(username string, password string) ClientOption {
 
 // WithPlainHTTP enables plain HTTP (non-TLS) communication with the registry.
 func WithPlainHTTP(plain bool) ClientOption {
-	return util.FunctionalOption[ClientOptions](func(opts *ClientOptions) {
+	return option.FunctionalOption[ClientOptions](func(opts *ClientOptions) {
 		opts.PlainHTTP = plain
 	})
 }
