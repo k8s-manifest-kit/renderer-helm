@@ -45,7 +45,7 @@ behavior under test. The tagged files are linted by
 - `pkg/helm.go` — source model and renderer orchestration.
 - `pkg/helm_option.go` — renderer options and defaults.
 - `pkg/helm_support.go` — chart loading, decoding, metadata, and hashes.
-- `pkg/helm_fs.go` — filesystem chart loading helpers.
+- `pkg/fs/` — `fs.LoadChartFromFS`, `io/fs`-based chart loading.
 - `pkg/helm_cache.go` — output-cache construction and cache keys.
 - `pkg/helm_chart_copy.go` — render-scoped copies of the loaded chart graph.
 - `pkg/locator/` — chart and repository location handling.

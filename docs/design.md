@@ -8,8 +8,11 @@ function, optional locator `Credentials`, `ProcessDependencies`, and
 source-specific `PostRenderers`.
 
 For local or embedded chart content, `Source.FS` may provide an `io/fs.FS` and
-`Source.Chart` identifies the chart root within it. The filesystem contents are
-converted to Helm buffered files and loaded with Helm's `LoadFiles` API. The
+`Source.Chart` identifies the chart root within it. The chart is loaded by
+`fs.LoadChartFromFS` from
+`github.com/k8s-manifest-kit/renderer-helm/pkg/fs`, which converts the
+filesystem contents to Helm buffered files and loads them with Helm's
+`LoadFiles` API. The
 existing path, repository, and OCI loading flows remain unchanged when `FS` is
 nil.
 

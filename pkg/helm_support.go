@@ -17,6 +17,7 @@ import (
 	"github.com/k8s-manifest-kit/engine/pkg/types"
 	"github.com/k8s-manifest-kit/pkg/util/cache"
 	"github.com/k8s-manifest-kit/pkg/util/k8s"
+	"github.com/k8s-manifest-kit/renderer-helm/pkg/fs"
 	"github.com/k8s-manifest-kit/renderer-helm/pkg/locator"
 )
 
@@ -169,7 +170,7 @@ func (h *sourceHolder) LoadChart(
 	var c *chart.Chart
 	var err error
 	if h.FS != nil {
-		c, err = loadChartFromFS(h.FS, h.Chart)
+		c, err = fs.LoadChartFromFS(h.FS, h.Chart)
 	} else {
 		var result locator.Result
 		result, err = locator.Locate(ctx, &locator.Request{

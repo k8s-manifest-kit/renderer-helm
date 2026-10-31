@@ -1,10 +1,10 @@
-package helm
+package fs
 
 import (
 	"bytes"
 	"errors"
 	"fmt"
-	"io/fs"
+	iofs "io/fs"
 	"slices"
 	"strings"
 
@@ -21,8 +21,11 @@ var (
 
 const maxDecompressedChartFileSize int64 = 5 * 1024 * 1024
 
-func loadChartFromFS(fsys fs.FS, root string) (*chart.Chart, error) {
-	chartFS, err := fs.Sub(fsys, root)
+// LoadChartFromFS loads a Helm chart from the chart root directory inside
+// fsys, honoring `.helmignore` rules and Helm's chart loader. Helpers,
+// sentinels, and the decompressed size limit are private to this package.
+func LoadChartFromFS(fsys iofs.FS, root string) (*chart.Chart, error) {
+	chartFS, err := iofs.Sub(fsys, root)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open chart root %q: %w", root, err)
 	}
@@ -49,15 +52,15 @@ func loadChartFromFS(fsys fs.FS, root string) (*chart.Chart, error) {
 	return result, nil
 }
 
-func chartIgnoreRules(fsys fs.FS) (*ignore.Rules, error) {
+func chartIgnoreRules(fsys iofs.FS) (*ignore.Rules, error) {
 	rules := ignore.Empty()
-	data, err := fs.ReadFile(fsys, ignore.HelmIgnore)
+	data, err := iofs.ReadFile(fsys, ignore.HelmIgnore)
 	if err == nil {
 		rules, err = ignore.Parse(bytes.NewReader(data))
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse %s: %w", ignore.HelmIgnore, err)
 		}
-	} else if !errors.Is(err, fs.ErrNotExist) {
+	} else if !errors.Is(err, iofs.ErrNotExist) {
 		return nil, fmt.Errorf("failed to read %s: %w", ignore.HelmIgnore, err)
 	}
 
@@ -66,9 +69,9 @@ func chartIgnoreRules(fsys fs.FS) (*ignore.Rules, error) {
 	return rules, nil
 }
 
-func collectChartFiles(fsys fs.FS, rules *ignore.Rules) ([]*archive.BufferedFile, error) {
+func collectChartFiles(fsys iofs.FS, rules *ignore.Rules) ([]*archive.BufferedFile, error) {
 	files := make([]*archive.BufferedFile, 0)
-	err := fs.WalkDir(fsys, ".", func(path string, entry fs.DirEntry, walkErr error) error {
+	err := iofs.WalkDir(fsys, ".", func(path string, entry iofs.DirEntry, walkErr error) error {
 		return collectChartFile(fsys, rules, &files, path, entry, walkErr)
 	})
 	if err != nil {
@@ -79,11 +82,11 @@ func collectChartFiles(fsys fs.FS, rules *ignore.Rules) ([]*archive.BufferedFile
 }
 
 func collectChartFile(
-	fsys fs.FS,
+	fsys iofs.FS,
 	rules *ignore.Rules,
 	files *[]*archive.BufferedFile,
 	path string,
-	entry fs.DirEntry,
+	entry iofs.DirEntry,
 	walkErr error,
 ) error {
 	if walkErr != nil {
@@ -100,7 +103,7 @@ func collectChartFile(
 
 	if info.IsDir() {
 		if rules.Ignore(path, info) {
-			return fs.SkipDir
+			return iofs.SkipDir
 		}
 
 		return nil
@@ -115,7 +118,7 @@ func collectChartFile(
 		return fmt.Errorf("%w: %q (limit %d)", errChartFileTooLarge, path, maxDecompressedChartFileSize)
 	}
 
-	data, err := fs.ReadFile(fsys, path)
+	data, err := iofs.ReadFile(fsys, path)
 	if err != nil {
 		return fmt.Errorf("failed to read chart file %q: %w", path, err)
 	}
