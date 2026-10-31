@@ -70,6 +70,28 @@ explicit type, wrap errors with `%w` while retaining chart/release
 context, and make validation errors name the failing source, key, or type
 instead of echoing input contents.
 
+### Multiline strings
+
+Use one descriptive, standalone, package-level `const name =` declaration
+with a raw string literal for every multiline string: fixtures, manifests,
+templates, and expected output. Never embed multiline string literals in
+function or method bodies, and never declare them as function-local
+constants. Never group multiline constants in `const (...)`; related
+single-line scalar constants can still be grouped, and single-line inline
+strings are unaffected.
+
+Keep large literal content separate from execution logic for readability.
+Preserve meaningful content indentation; the declaration layout must not
+introduce unintended bytes. A function may format the named template into
+a local variable — the prohibition concerns where the literal is declared,
+not where its string value is used:
+
+```go
+const fixtureYAML = `apiVersion: v1
+kind: ConfigMap
+`
+```
+
 ## Concurrency and cache evidence
 
 `Renderer.Process` is safe for concurrent use, but user-supplied code —

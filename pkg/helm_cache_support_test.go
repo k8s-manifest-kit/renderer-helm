@@ -63,6 +63,17 @@ data:
   source: %s
 `
 
+// cacheCollisionRepoIndexTmpl is the repository index served by every mock
+// Helm repository; its placeholders carry the chart name, chart version, and
+// archive name.
+const cacheCollisionRepoIndexTmpl = `apiVersion: v1
+entries:
+  %s:
+    - version: %q
+      urls:
+        - %s
+`
+
 // cacheCollisionConfigMapName returns the ConfigMap name rendered by the
 // collision fixture for the given release.
 func cacheCollisionConfigMapName(releaseName string) string {
@@ -146,13 +157,7 @@ func newMockHelmRepo(t *testing.T, marker string) string {
 
 	archive := cacheCollisionChartArchive(t, marker)
 	archiveName := cacheCollisionChartName + "-" + cacheCollisionChartVersion + ".tgz"
-	repoIndex := fmt.Sprintf(`apiVersion: v1
-entries:
-  %s:
-    - version: %q
-      urls:
-        - %s
-`, cacheCollisionChartName, cacheCollisionChartVersion, archiveName)
+	repoIndex := fmt.Sprintf(cacheCollisionRepoIndexTmpl, cacheCollisionChartName, cacheCollisionChartVersion, archiveName)
 
 	mux := http.NewServeMux()
 
