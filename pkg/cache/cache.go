@@ -1,4 +1,4 @@
-package helm
+package cache
 
 import (
 	"fmt"
@@ -7,14 +7,14 @@ import (
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
-	"github.com/k8s-manifest-kit/pkg/util/cache"
+	utilcache "github.com/k8s-manifest-kit/pkg/util/cache"
 )
 
-// chartSpec contains the data used to generate cache keys for rendered charts.
+// ChartSpec contains the data used to generate cache keys for rendered charts.
 // Keys are evaluated within a single source's cache: every registered source
 // owns an independent output cache, so sources with identical specs never
 // share entries.
-type chartSpec struct {
+type ChartSpec struct {
 	Chart          string
 	ReleaseName    string
 	ReleaseVersion string
@@ -34,20 +34,26 @@ type chartSpec struct {
 //
 // Usage:
 //
-//	helm.WithCache(cache.WithKeyFunc(helm.FastCacheKeyFunc))
+//	import (
+//		utilcache "github.com/k8s-manifest-kit/pkg/util/cache"
+//		helmcache "github.com/k8s-manifest-kit/renderer-helm/pkg/cache"
+//		helm "github.com/k8s-manifest-kit/renderer-helm/pkg"
+//	)
+//
+//	helm.WithCache(utilcache.WithKeyFunc(helmcache.FastCacheKeyFunc))
 func FastCacheKeyFunc(key any) string {
-	if spec, ok := key.(chartSpec); ok {
+	if spec, ok := key.(ChartSpec); ok {
 		return fmt.Sprintf("%s:%s:%s", spec.Chart, spec.ReleaseName, spec.ReleaseVersion)
 	}
 
 	return ""
 }
 
-// newCache creates a cache instance with Helm-specific default KeyFunc.
+// New creates a cache instance with Helm-specific default KeyFunc.
 // Each call returns an independent cache: the renderer creates one per
 // registered source so cached outputs never cross source boundaries.
 // It returns nil when caching is disabled.
-func newCache(opts *cache.Options) cache.Interface[[]unstructured.Unstructured] {
+func New(opts *utilcache.Options) utilcache.Interface[[]unstructured.Unstructured] {
 	if opts == nil {
 		return nil
 	}
@@ -56,8 +62,8 @@ func newCache(opts *cache.Options) cache.Interface[[]unstructured.Unstructured] 
 
 	// Inject default KeyFunc for Helm charts
 	if co.KeyFunc == nil {
-		co.KeyFunc = cache.DefaultKeyFunc
+		co.KeyFunc = utilcache.DefaultKeyFunc
 	}
 
-	return cache.NewRenderCache(co)
+	return utilcache.NewRenderCache(co)
 }

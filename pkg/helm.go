@@ -18,6 +18,7 @@ import (
 	"github.com/k8s-manifest-kit/engine/pkg/pipeline"
 	"github.com/k8s-manifest-kit/engine/pkg/types"
 	"github.com/k8s-manifest-kit/pkg/util/maps"
+	"github.com/k8s-manifest-kit/renderer-helm/pkg/cache"
 	"github.com/k8s-manifest-kit/renderer-helm/pkg/locator"
 )
 
@@ -108,7 +109,7 @@ func New(inputs []Source, opts ...RendererOption) (*Renderer, error) {
 			mu:     &sync.RWMutex{},
 			// Each source gets an independent output cache so cache entries
 			// never cross source boundaries, even when keys collide.
-			cache: newCache(rendererOpts.CacheOptions),
+			cache: cache.New(rendererOpts.CacheOptions),
 		}
 		if err := holders[i].Validate(); err != nil {
 			return nil, fmt.Errorf("validation failed for source[%d] (chart: %q, release: %q): %w",
@@ -295,7 +296,7 @@ func (r *Renderer) processSingle(
 		return nil, &RenderError{Chart: holder.Chart, ReleaseName: holder.ReleaseName, Err: err}
 	}
 
-	spec := chartSpec{
+	spec := cache.ChartSpec{
 		Chart:          holder.Chart,
 		ReleaseName:    holder.ReleaseName,
 		ReleaseVersion: holder.ReleaseVersion,

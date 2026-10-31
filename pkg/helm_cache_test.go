@@ -8,8 +8,9 @@ import (
 	"github.com/rs/xid"
 
 	"github.com/k8s-manifest-kit/engine/pkg/types"
-	"github.com/k8s-manifest-kit/pkg/util/cache"
+	utilcache "github.com/k8s-manifest-kit/pkg/util/cache"
 	helm "github.com/k8s-manifest-kit/renderer-helm/pkg"
+	"github.com/k8s-manifest-kit/renderer-helm/pkg/cache"
 
 	. "github.com/onsi/gomega"
 )
@@ -70,7 +71,7 @@ func TestCacheSourceIsolation(t *testing.T) {
 
 		renderer, err := helm.New(
 			cacheCollisionFSSources("cache-iso-fast"),
-			helm.WithCache(cache.WithKeyFunc(helm.FastCacheKeyFunc)),
+			helm.WithCache(utilcache.WithKeyFunc(cache.FastCacheKeyFunc)),
 			helm.WithSourceAnnotations(true),
 		)
 		g.Expect(err).ToNot(HaveOccurred())
@@ -91,7 +92,7 @@ func TestCacheSourceIsolation(t *testing.T) {
 
 		renderer, err := helm.New(
 			cacheCollisionFSSources("cache-iso-constant"),
-			helm.WithCache(cache.WithKeyFunc(constantCacheKey)),
+			helm.WithCache(utilcache.WithKeyFunc(constantCacheKey)),
 			helm.WithSourceAnnotations(true),
 		)
 		g.Expect(err).ToNot(HaveOccurred())
@@ -392,7 +393,7 @@ func TestCacheIntegration(t *testing.T) {
 				}),
 			},
 		},
-			helm.WithCache(cache.WithKeyFunc(helm.FastCacheKeyFunc)),
+			helm.WithCache(utilcache.WithKeyFunc(cache.FastCacheKeyFunc)),
 			helm.WithSourceAnnotations(true),
 		)
 		g.Expect(err).ToNot(HaveOccurred())
@@ -416,5 +417,56 @@ func TestCacheIntegration(t *testing.T) {
 		// The hit must serve the first render's output even though the second
 		// render passed different values
 		g.Expect(deploymentReplicas(g, result2)).To(Equal(int64(1)))
+	})
+
+	t.Run("should pass chart specs to custom key functions", func(t *testing.T) {
+		g := NewWithT(t)
+
+		var specs []cache.ChartSpec
+
+		renderer, err := helm.New([]helm.Source{
+			{
+				Chart:          testChartPath,
+				ReleaseName:    "spec-callback-test",
+				ReleaseVersion: "0.1.0",
+				Values: helm.Values(map[string]any{
+					"replicaCount": 2,
+				}),
+			},
+		},
+			helm.WithCache(utilcache.WithKeyFunc(func(key any) string {
+				if spec, ok := key.(cache.ChartSpec); ok {
+					specs = append(specs, spec)
+				}
+
+				return cache.FastCacheKeyFunc(key)
+			})),
+			helm.WithSourceAnnotations(true),
+		)
+		g.Expect(err).ToNot(HaveOccurred())
+
+		// First render - cache miss
+		result1, err := renderer.Process(t.Context(), nil)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(result1).To(HaveLen(3))
+		assertRenderOrigin(g, result1, types.RenderOriginLive)
+
+		// Second render - cache hit through the identity-only key
+		result2, err := renderer.Process(t.Context(), nil)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(result2).To(HaveLen(len(result1)))
+		assertRenderOrigin(g, result2, types.RenderOriginCache)
+
+		// The renderer's key function receives the exported spec shape with
+		// the source's chart identity and the Helm render values (the merged
+		// user values live under the "Values" key of the render document).
+		g.Expect(specs).ToNot(BeEmpty())
+		for _, spec := range specs {
+			g.Expect(spec.Chart).To(Equal(testChartPath))
+			g.Expect(spec.ReleaseName).To(Equal("spec-callback-test"))
+			g.Expect(spec.ReleaseVersion).To(Equal("0.1.0"))
+			g.Expect(spec.Values).To(HaveKey("Values"))
+			g.Expect(spec.Values["Values"]).To(HaveKeyWithValue("replicaCount", 2))
+		}
 	})
 }

@@ -22,8 +22,8 @@ import (
 )
 
 // The cache collision fixtures build two Helm sources that are indistinguishable
-// in every chartSpec field — same chart path, metadata, release, version, and
-// default values — while their templates embed a marker so their rendered
+// in every cache.ChartSpec field — same chart path, metadata, release, version,
+// and default values — while their templates embed a marker so their rendered
 // outputs differ. A shared output cache would make the second source reuse the
 // first source's result; per-source caches must keep them isolated.
 
