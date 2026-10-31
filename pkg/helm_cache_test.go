@@ -1,8 +1,11 @@
 package helm_test
 
 import (
+	"context"
 	"sync"
 	"testing"
+
+	"github.com/rs/xid"
 
 	"github.com/k8s-manifest-kit/engine/pkg/types"
 	"github.com/k8s-manifest-kit/pkg/util/cache"
@@ -215,5 +218,203 @@ func TestCacheSourceIsolation(t *testing.T) {
 		for i := range after {
 			g.Expect(after[i].GetLabels()).ToNot(HaveKey("cache-test/worker"))
 		}
+	})
+}
+func TestCacheIntegration(t *testing.T) {
+
+	t.Run("should cache identical renders", func(t *testing.T) {
+		g := NewWithT(t)
+		renderer, err := helm.New([]helm.Source{
+			{
+				Chart:       testChartPath,
+				ReleaseName: "cache-test",
+				Values: helm.Values(map[string]any{
+					"replicaCount": 2,
+				}),
+			},
+		},
+			helm.WithCache(),
+			helm.WithSourceAnnotations(true),
+		)
+		g.Expect(err).ToNot(HaveOccurred())
+
+		// First render - cache miss
+		result1, err := renderer.Process(t.Context(), nil)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(result1).To(HaveLen(3))
+		for _, obj := range result1 {
+			g.Expect(obj.GetAnnotations()).Should(HaveKeyWithValue(
+				types.AnnotationRenderOrigin,
+				types.RenderOriginLive,
+			))
+		}
+
+		// Second render - cache hit
+		result2, err := renderer.Process(t.Context(), nil)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(result2).To(HaveLen(len(result1)))
+
+		for _, obj := range result2 {
+			g.Expect(obj.GetAnnotations()).Should(HaveKeyWithValue(
+				types.AnnotationRenderOrigin,
+				types.RenderOriginCache,
+			))
+		}
+	})
+
+	t.Run("should miss cache on different values", func(t *testing.T) {
+		g := NewWithT(t)
+		callCount := 0
+		dynamicValues := func(_ context.Context) (types.Values, error) {
+			callCount++
+
+			return types.Values{
+				"replicaCount": callCount,
+				"image": map[string]any{
+					"tag": xid.New().String(),
+				},
+			}, nil
+		}
+
+		renderer, err := helm.New([]helm.Source{
+			{
+				Chart:       testChartPath,
+				ReleaseName: "dynamic-cache-test",
+				Values:      dynamicValues,
+			},
+		},
+			helm.WithCache(),
+			helm.WithSourceAnnotations(true),
+		)
+		g.Expect(err).ToNot(HaveOccurred())
+
+		// First render - cache miss
+		result1, err := renderer.Process(t.Context(), nil)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(result1).To(HaveLen(3))
+		assertRenderOrigin(g, result1, types.RenderOriginLive)
+
+		// Second render with different values - cache miss again: the default
+		// key includes the rendered values, so new values must re-render.
+		result2, err := renderer.Process(t.Context(), nil)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(result2).To(HaveLen(3))
+		assertRenderOrigin(g, result2, types.RenderOriginLive)
+
+		// The second render must produce its own output, not a stale result.
+		g.Expect(deploymentReplicas(g, result1)).To(Equal(int64(1)))
+		g.Expect(deploymentReplicas(g, result2)).To(Equal(int64(2)))
+	})
+
+	t.Run("should work with cache disabled", func(t *testing.T) {
+		g := NewWithT(t)
+		renderer, err := helm.New(
+			[]helm.Source{
+				{
+					Chart:       testChartPath,
+					ReleaseName: "no-cache-test",
+					Values: helm.Values(map[string]any{
+						"replicaCount": 1,
+					}),
+				},
+			},
+		)
+		g.Expect(err).ToNot(HaveOccurred())
+
+		// First render
+		result1, err := renderer.Process(t.Context(), nil)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(result1).To(HaveLen(3))
+
+		// Second render - should work even without cache
+		result2, err := renderer.Process(t.Context(), nil)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(result2).To(HaveLen(len(result1)))
+	})
+
+	t.Run("should return clones from cache", func(t *testing.T) {
+		g := NewWithT(t)
+		renderer, err := helm.New([]helm.Source{
+			{
+				Chart:       testChartPath,
+				ReleaseName: "clone-test",
+				Values: helm.Values(map[string]any{
+					"replicaCount": 1,
+				}),
+			},
+		},
+			helm.WithCache(),
+			helm.WithSourceAnnotations(true),
+		)
+		g.Expect(err).ToNot(HaveOccurred())
+
+		// First render populates the cache
+		result1, err := renderer.Process(t.Context(), nil)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(result1).To(HaveLen(3))
+		assertRenderOrigin(g, result1, types.RenderOriginLive)
+
+		// Mutate the nested objects of the returned result
+		for i := range result1 {
+			result1[i].SetName("modified-name")
+		}
+
+		// Second render hits the cache and must be unaffected by the mutations
+		result2, err := renderer.Process(t.Context(), nil)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(result2).To(HaveLen(3))
+		assertRenderOrigin(g, result2, types.RenderOriginCache)
+
+		for i := range result2 {
+			g.Expect(result2[i].GetName()).ToNot(Equal("modified-name"))
+		}
+
+		// Mutating a cached result must not pollute later hits either
+		result2[0].SetName("modified-again")
+
+		result3, err := renderer.Process(t.Context(), nil)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(result3).To(HaveLen(3))
+		assertRenderOrigin(g, result3, types.RenderOriginCache)
+		g.Expect(result3[0].GetName()).ToNot(Equal("modified-again"))
+	})
+
+	t.Run("should use custom cache key function", func(t *testing.T) {
+		g := NewWithT(t)
+
+		// Use FastCacheKeyFunc which ignores values for better performance
+		renderer, err := helm.New([]helm.Source{
+			{
+				Chart:       testChartPath,
+				ReleaseName: "custom-key-test",
+				Values: helm.Values(map[string]any{
+					"replicaCount": 1,
+				}),
+			},
+		},
+			helm.WithCache(cache.WithKeyFunc(helm.FastCacheKeyFunc)),
+			helm.WithSourceAnnotations(true),
+		)
+		g.Expect(err).ToNot(HaveOccurred())
+
+		// First render - cache miss
+		result1, err := renderer.Process(t.Context(), nil)
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(result1).To(HaveLen(3))
+		assertRenderOrigin(g, result1, types.RenderOriginLive)
+		g.Expect(deploymentReplicas(g, result1)).To(Equal(int64(1)))
+
+		// Second render with DIFFERENT values but using FastCacheKeyFunc
+		// which ignores values within one source, so this is a cache hit
+		result2, err := renderer.Process(t.Context(), map[string]any{
+			"replicaCount": 5,
+		})
+		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(result2).To(HaveLen(len(result1)))
+		assertRenderOrigin(g, result2, types.RenderOriginCache)
+
+		// The hit must serve the first render's output even though the second
+		// render passed different values
+		g.Expect(deploymentReplicas(g, result2)).To(Equal(int64(1)))
 	})
 }

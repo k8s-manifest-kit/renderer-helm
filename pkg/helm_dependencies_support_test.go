@@ -6,7 +6,6 @@ import (
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
-	"github.com/k8s-manifest-kit/engine/pkg/types"
 	helm "github.com/k8s-manifest-kit/renderer-helm/pkg"
 
 	. "github.com/onsi/gomega"
@@ -119,26 +118,6 @@ func findConfigMap(objects []unstructured.Unstructured, name string) *unstructur
 	}
 
 	return nil
-}
-
-// configMapData returns the data section of a ConfigMap object.
-func configMapData(g *WithT, object *unstructured.Unstructured) map[string]any {
-	data, found, err := unstructured.NestedMap(object.Object, "data")
-	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(found).To(BeTrue(), "ConfigMap %q should have a data section", object.GetName())
-
-	return data
-}
-
-// assertRenderOrigin checks that every object carries the expected
-// render-origin annotation.
-func assertRenderOrigin(g *WithT, objects []unstructured.Unstructured, origin string) {
-	for i := range objects {
-		g.Expect(objects[i].GetAnnotations()).To(HaveKeyWithValue(
-			types.AnnotationRenderOrigin,
-			origin,
-		))
-	}
 }
 
 // concurrentRenderCase pairs the render-time values used by one concurrent

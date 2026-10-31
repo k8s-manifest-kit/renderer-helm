@@ -57,11 +57,35 @@ tests for annotations, hashes, and cache isolation.
 ## Code and test conventions
 
 Tests live in external test packages (`helm_test`, `container_test`,
-`locator_test`) and exercise the package through its public API. Test-only
-helpers stay in `*_support_test.go` files next to the tests they serve;
+`locator_test`) and exercise the package through its public API;
 `pkg/helm_support.go` holds shared implementation helpers. Keep feature
 files cohesive and introduce abstractions only when they capture a real
 responsibility, not to erase similar-looking code.
+
+### Test layout
+
+- Colocate tests with implementation. A `test/` subdirectory is a separate
+  Go package, not a cosmetic folder; use existing package boundaries.
+- Organize larger suites by concern using `<component>_<concern>_test.go`;
+  retain a cohesive `<component>_test.go` for core API behavior. Use
+  `_metadata_test.go`, `_cache_test.go`, `_values_test.go`, and
+  `_concurrency_test.go` where relevant, not as mandatory files for every
+  package.
+- Place benchmarks in `<component>_benchmark_test.go`, in the same package
+  directory, retaining benchmark names and setup/timing behavior.
+- Put shared helpers in `<component>_support_test.go` and substantial
+  feature-specific fixture machinery in
+  `<component>_<concern>_support_test.go`. Small test-local helpers and
+  scenario assertions can remain beside their tests.
+- Support files contain helper/fixture/type/constant declarations, not test,
+  benchmark, fuzz, or example entry points. `_support_test.go` is a naming
+  convention; only `_test.go` has Go's test-file significance.
+- Keep tests discoverable without excessive fragmentation: no hard line
+  limit, mandatory one-file-per-test rule, shared cross-repository harness,
+  fixture-storage migration, or automatic test-speed claim.
+- Preserve integration build tags; filenames alone do not exclude a test
+  from the offline suite. Offline cache/metrics interaction tests do not
+  become live integration tests because of their function names.
 
 Use Gomega assertions with `NewWithT(t)` — dot-imports are allowed for
 Gomega — and derive contexts and temporary directories from the test with

@@ -2,17 +2,10 @@ package locator_test
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
-	"net/http/httptest"
 	"os"
-	"strconv"
 	"testing"
-
-	"github.com/opencontainers/go-digest"
-	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 
 	"github.com/k8s-manifest-kit/renderer-helm/pkg/container"
 	"github.com/k8s-manifest-kit/renderer-helm/pkg/locator"
@@ -173,104 +166,33 @@ func TestOCILocator_IntegrityFailure(t *testing.T) {
 	g.Expect(entries).To(BeEmpty())
 }
 
-// ---------------------------------------------------------------------------
-// Mock OCI registry helper
-// ---------------------------------------------------------------------------
+func TestOCILocator_NonSemverTags(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
 
-type mockOCIServer struct {
-	*httptest.Server
+	srv := newMockOCIRegistryWithTagList(t, []string{"latest", "dev-build", "nightly"})
 
-	ref            string
-	manifestDigest digest.Digest
+	oci := &locator.OCI{
+		Ref:       "oci://" + srv.ref,
+		CacheDir:  t.TempDir(),
+		PlainHTTP: true,
+	}
+
+	_, err := oci.Locate(t.Context())
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(errors.Is(err, locator.ErrNoValidSemverTag)).To(BeTrue())
 }
 
-// newMockOCIRegistry spins up a lightweight mock OCI registry for locator-level
-// tests (e.g. digest-pin). The full OCI client test suite and its more elaborate
-// mocks live in pkg/container.
-func newMockOCIRegistry(t *testing.T, chartContent []byte) *mockOCIServer {
-	t.Helper()
+func TestOCILocator_EmptyCacheDir(t *testing.T) {
+	t.Parallel()
+	g := NewWithT(t)
 
-	return newMockOCIRegistryServingChart(t, chartContent, chartContent)
-}
-
-// newMockOCIRegistryServingChart builds a mock OCI registry whose manifest
-// descriptors advertise chartContent, while the blob endpoint serves
-// servedChart for the chart digest. Serving divergent bytes lets tests
-// exercise content verification through the public locator path.
-func newMockOCIRegistryServingChart(t *testing.T, chartContent []byte, servedChart []byte) *mockOCIServer {
-	t.Helper()
-
-	chartDigest := digest.FromBytes(chartContent)
-	configContent := []byte(`{"name":"test-chart","version":"1.0.0"}`)
-	configDigest := digest.FromBytes(configContent)
-
-	manifest := ocispec.Manifest{
-		MediaType: ocispec.MediaTypeImageManifest,
-		Config: ocispec.Descriptor{
-			MediaType: "application/vnd.cncf.helm.config.v1+json",
-			Digest:    configDigest,
-			Size:      int64(len(configContent)),
-		},
-		Layers: []ocispec.Descriptor{{
-			MediaType: "application/vnd.cncf.helm.chart.content.v1.tar+gzip",
-			Digest:    chartDigest,
-			Size:      int64(len(chartContent)),
-		}},
+	oci := &locator.OCI{
+		Ref:      "oci://registry.example.com/charts/nginx",
+		CacheDir: "",
 	}
 
-	manifestBytes, err := json.Marshal(manifest)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	manifestDigest := digest.FromBytes(manifestBytes)
-
-	blobs := map[digest.Digest][]byte{
-		chartDigest:  servedChart,
-		configDigest: configContent,
-	}
-
-	const repo = "test/chart"
-
-	mux := http.NewServeMux()
-
-	mux.HandleFunc(fmt.Sprintf("/v2/%s/manifests/", repo), func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", ocispec.MediaTypeImageManifest)
-		w.Header().Set("Docker-Content-Digest", manifestDigest.String())
-		w.Header().Set("Content-Length", strconv.Itoa(len(manifestBytes)))
-		_, _ = w.Write(manifestBytes)
-	})
-
-	mux.HandleFunc(fmt.Sprintf("/v2/%s/blobs/", repo), func(w http.ResponseWriter, r *http.Request) {
-		ref := r.URL.Path[len(fmt.Sprintf("/v2/%s/blobs/", repo)):]
-
-		d, err := digest.Parse(ref)
-		if err != nil {
-			http.Error(w, "bad digest", http.StatusBadRequest)
-
-			return
-		}
-
-		data, ok := blobs[d]
-		if !ok {
-			http.NotFound(w, r)
-
-			return
-		}
-
-		w.Header().Set("Content-Length", strconv.Itoa(len(data)))
-		w.Header().Set("Docker-Content-Digest", d.String())
-		_, _ = w.Write(data)
-	})
-
-	srv := httptest.NewServer(mux)
-	t.Cleanup(srv.Close)
-
-	host := srv.Listener.Addr().String()
-
-	return &mockOCIServer{
-		Server:         srv,
-		ref:            host + "/" + repo,
-		manifestDigest: manifestDigest,
-	}
+	_, err := oci.Locate(t.Context())
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(errors.Is(err, locator.ErrEmptyCacheDir)).To(BeTrue())
 }

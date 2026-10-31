@@ -1,166 +1,146 @@
 package container_test
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
-	"strings"
 	"testing"
 
 	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
-// Integrity-test registry helpers. These servers serve bytes that diverge
-// from the digests and sizes their descriptors and response headers
-// advertise, so that client-side verification can be exercised against a
-// hostile registry.
+// ---------------------------------------------------------------------------
+// Mock OCI registry helpers
+// ---------------------------------------------------------------------------
 
-// integrityRegistry is a mock OCI registry whose served bytes may diverge
-// from the content its descriptors advertise.
-type integrityRegistry struct {
+type mockOCIServer struct {
 	*httptest.Server
 
 	ref            string
 	manifestDigest digest.Digest
-	chartDigest    digest.Digest
 }
 
-// integrityOverrides rewrites the bytes served for one artifact while every
-// descriptor and response header keeps advertising the original content.
-// Zero values keep the corresponding artifact honest.
-type integrityOverrides struct {
-	// manifest rewrites the bytes served for the chart manifest.
-	manifest func(original []byte) []byte
-
-	// index rewrites the bytes served for the image index.
-	index func(original []byte) []byte
-
-	// chart rewrites the bytes served for the chart blob.
-	chart func(original []byte) []byte
-
-	// layer overrides the chart layer descriptor recorded in the chart
-	// manifest, e.g. with an invalid digest or size.
-	layer *ocispec.Descriptor
-
-	// manifestSize overrides the size advertised for the chart manifest in
-	// resolution responses; zero advertises the honest size.
-	manifestSize int64
-}
-
-// chartArtifacts is a self-consistent set of OCI artifacts for one chart:
-// its manifest, the config blob, and the chart blob. The bytes actually
-// served may diverge from these descriptors.
-type chartArtifacts struct {
-	manifest       ocispec.Manifest
-	manifestBytes  []byte
-	manifestDigest digest.Digest
-
-	chartContent []byte
-	chartDigest  digest.Digest
-
-	configContent []byte
-	configDigest  digest.Digest
-}
-
-// newChartArtifacts builds a chart manifest referencing the given chart
-// blob. layer, when set, replaces the chart layer descriptor so the manifest
-// can advertise a hostile digest or size; the manifest itself stays
-// consistent with the bytes it is served as.
-func newChartArtifacts(t *testing.T, chartContent []byte, layer *ocispec.Descriptor) chartArtifacts {
+func newMockOCIRegistry(t *testing.T, chartContent []byte) *mockOCIServer {
 	t.Helper()
 
-	artifacts := chartArtifacts{
-		chartContent:  chartContent,
-		chartDigest:   digest.FromBytes(chartContent),
-		configContent: []byte(`{"name":"test-chart","version":"1.0.0"}`),
-	}
-	artifacts.configDigest = digest.FromBytes(artifacts.configContent)
+	chartDigest := digest.FromBytes(chartContent)
+	configContent := []byte(`{"name":"test-chart","version":"1.0.0"}`)
+	configDigest := digest.FromBytes(configContent)
 
-	chartLayer := ocispec.Descriptor{
-		MediaType: "application/vnd.cncf.helm.chart.content.v1.tar+gzip",
-		Digest:    artifacts.chartDigest,
-		Size:      int64(len(chartContent)),
-	}
-	if layer != nil {
-		chartLayer = *layer
-	}
-
-	artifacts.manifest = ocispec.Manifest{
-		MediaType:     ocispec.MediaTypeImageManifest,
-		SchemaVersion: 2,
+	manifest := ocispec.Manifest{
+		MediaType: ocispec.MediaTypeImageManifest,
 		Config: ocispec.Descriptor{
 			MediaType: "application/vnd.cncf.helm.config.v1+json",
-			Digest:    artifacts.configDigest,
-			Size:      int64(len(artifacts.configContent)),
+			Digest:    configDigest,
+			Size:      int64(len(configContent)),
 		},
-		Layers: []ocispec.Descriptor{chartLayer},
+		Layers: []ocispec.Descriptor{{
+			MediaType: "application/vnd.cncf.helm.chart.content.v1.tar+gzip",
+			Digest:    chartDigest,
+			Size:      int64(len(chartContent)),
+		}},
 	}
 
-	var err error
+	return newMockOCIServer(t, manifest, map[digest.Digest][]byte{
+		chartDigest:  chartContent,
+		configDigest: configContent,
+	}, nil)
+}
 
-	artifacts.manifestBytes, err = json.Marshal(artifacts.manifest)
+func newMockOCIRegistryMultiLayer(t *testing.T, firstContent []byte, lastContent []byte) *mockOCIServer {
+	t.Helper()
+
+	firstDigest := digest.FromBytes(firstContent)
+	lastDigest := digest.FromBytes(lastContent)
+	configContent := []byte(`{}`)
+	configDigest := digest.FromBytes(configContent)
+
+	manifest := ocispec.Manifest{
+		MediaType: ocispec.MediaTypeImageManifest,
+		Config: ocispec.Descriptor{
+			MediaType: "application/vnd.cncf.helm.config.v1+json",
+			Digest:    configDigest,
+			Size:      int64(len(configContent)),
+		},
+		Layers: []ocispec.Descriptor{
+			{
+				MediaType: "application/vnd.cncf.helm.chart.content.v1.tar+gzip",
+				Digest:    firstDigest,
+				Size:      int64(len(firstContent)),
+			},
+			{
+				MediaType: "application/vnd.cncf.helm.chart.content.v1.tar+gzip",
+				Digest:    lastDigest,
+				Size:      int64(len(lastContent)),
+			},
+		},
+	}
+
+	return newMockOCIServer(t, manifest, map[digest.Digest][]byte{
+		firstDigest:  firstContent,
+		lastDigest:   lastContent,
+		configDigest: configContent,
+	}, nil)
+}
+
+func newMockOCIRegistryNoChartLayer(t *testing.T) *mockOCIServer {
+	t.Helper()
+
+	configContent := []byte(`{}`)
+	configDigest := digest.FromBytes(configContent)
+
+	manifest := ocispec.Manifest{
+		MediaType: ocispec.MediaTypeImageManifest,
+		Config: ocispec.Descriptor{
+			MediaType: "application/vnd.cncf.helm.config.v1+json",
+			Digest:    configDigest,
+			Size:      int64(len(configContent)),
+		},
+		Layers: []ocispec.Descriptor{},
+	}
+
+	return newMockOCIServer(t, manifest, map[digest.Digest][]byte{
+		configDigest: configContent,
+	}, nil)
+}
+
+func newMockOCIRegistryWithIndex(t *testing.T, chartContent []byte) *mockOCIServer {
+	t.Helper()
+
+	chartDigest := digest.FromBytes(chartContent)
+	configContent := []byte(`{"name":"test-chart","version":"1.0.0"}`)
+	configDigest := digest.FromBytes(configContent)
+
+	manifest := ocispec.Manifest{
+		MediaType: ocispec.MediaTypeImageManifest,
+		Config: ocispec.Descriptor{
+			MediaType: "application/vnd.cncf.helm.config.v1+json",
+			Digest:    configDigest,
+			Size:      int64(len(configContent)),
+		},
+		Layers: []ocispec.Descriptor{{
+			MediaType: "application/vnd.cncf.helm.chart.content.v1.tar+gzip",
+			Digest:    chartDigest,
+			Size:      int64(len(chartContent)),
+		}},
+	}
+
+	manifestBytes, err := json.Marshal(manifest)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	artifacts.manifestDigest = digest.FromBytes(artifacts.manifestBytes)
-
-	return artifacts
-}
-
-// newDirectIntegrityRegistry serves a single chart manifest for every
-// manifest reference, plus its blobs. Descriptors and headers advertise the
-// untampered content; the served bytes follow the overrides.
-func newDirectIntegrityRegistry(t *testing.T, chartContent []byte, overrides integrityOverrides) *integrityRegistry {
-	t.Helper()
-
-	artifacts := newChartArtifacts(t, chartContent, overrides.layer)
-
-	servedManifest := applyTamper(overrides.manifest, artifacts.manifestBytes)
-	servedChart := applyTamper(overrides.chart, artifacts.chartContent)
-
-	manifestSize := int64(len(artifacts.manifestBytes))
-	if overrides.manifestSize != 0 {
-		manifestSize = overrides.manifestSize
-	}
-
-	const repo = "test/chart"
-
-	blobs := map[digest.Digest][]byte{
-		artifacts.chartDigest:  servedChart,
-		artifacts.configDigest: artifacts.configContent,
-	}
-
-	mux := serveChartBlobs(repo, blobs)
-
-	mux.HandleFunc(fmt.Sprintf("/v2/%s/manifests/", repo), func(w http.ResponseWriter, r *http.Request) {
-		writeOCIContent(w, r, ocispec.MediaTypeImageManifest, artifacts.manifestDigest, manifestSize, servedManifest)
-	})
-
-	return newIntegrityRegistry(t, mux, artifacts, artifacts.manifestDigest)
-}
-
-// newIndexIntegrityRegistry serves an image index with a single chart
-// manifest candidate. Digest references select the candidate manifest; every
-// other reference resolves to the index.
-func newIndexIntegrityRegistry(t *testing.T, chartContent []byte, overrides integrityOverrides) *integrityRegistry {
-	t.Helper()
-
-	artifacts := newChartArtifacts(t, chartContent, overrides.layer)
-
-	servedChild := applyTamper(overrides.manifest, artifacts.manifestBytes)
+	manifestDigest := digest.FromBytes(manifestBytes)
 
 	idx := ocispec.Index{
-		MediaType:     ocispec.MediaTypeImageIndex,
-		SchemaVersion: 2,
+		MediaType: ocispec.MediaTypeImageIndex,
 		Manifests: []ocispec.Descriptor{{
 			MediaType: ocispec.MediaTypeImageManifest,
-			Digest:    artifacts.manifestDigest,
-			Size:      int64(len(artifacts.manifestBytes)),
+			Digest:    manifestDigest,
+			Size:      int64(len(manifestBytes)),
 		}},
 	}
 
@@ -170,48 +150,35 @@ func newIndexIntegrityRegistry(t *testing.T, chartContent []byte, overrides inte
 	}
 
 	indexDigest := digest.FromBytes(indexBytes)
-	servedIndex := applyTamper(overrides.index, indexBytes)
 
 	const repo = "test/chart"
-	manifestPrefix := fmt.Sprintf("/v2/%s/manifests/", repo)
 
-	blobs := map[digest.Digest][]byte{
-		artifacts.chartDigest:  applyTamper(overrides.chart, artifacts.chartContent),
-		artifacts.configDigest: artifacts.configContent,
-	}
+	mux := http.NewServeMux()
 
-	mux := serveChartBlobs(repo, blobs)
-
-	mux.HandleFunc(manifestPrefix, func(w http.ResponseWriter, r *http.Request) {
-		ref := strings.TrimPrefix(r.URL.Path, manifestPrefix)
-
-		if ref == artifacts.manifestDigest.String() {
-			writeOCIContent(
-				w, r,
-				ocispec.MediaTypeImageManifest,
-				artifacts.manifestDigest,
-				int64(len(artifacts.manifestBytes)),
-				servedChild,
-			)
+	mux.HandleFunc(fmt.Sprintf("/v2/%s/manifests/", repo), func(w http.ResponseWriter, r *http.Request) {
+		ref := r.URL.Path[len(fmt.Sprintf("/v2/%s/manifests/", repo)):]
+		if ref == manifestDigest.String() {
+			w.Header().Set("Content-Type", ocispec.MediaTypeImageManifest)
+			w.Header().Set("Docker-Content-Digest", manifestDigest.String())
+			w.Header().Set("Content-Length", strconv.Itoa(len(manifestBytes)))
+			_, _ = w.Write(manifestBytes)
 
 			return
 		}
 
-		writeOCIContent(w, r, ocispec.MediaTypeImageIndex, indexDigest, int64(len(indexBytes)), servedIndex)
+		w.Header().Set("Content-Type", ocispec.MediaTypeImageIndex)
+		w.Header().Set("Docker-Content-Digest", indexDigest.String())
+		w.Header().Set("Content-Length", strconv.Itoa(len(indexBytes)))
+		_, _ = w.Write(indexBytes)
 	})
 
-	return newIntegrityRegistry(t, mux, artifacts, indexDigest)
-}
+	blobs := map[digest.Digest][]byte{
+		chartDigest:  chartContent,
+		configDigest: configContent,
+	}
 
-// serveChartBlobs registers a blob endpoint serving the given content. The
-// Docker-Content-Digest header always claims the requested digest.
-func serveChartBlobs(repo string, blobs map[digest.Digest][]byte) *http.ServeMux {
-	mux := http.NewServeMux()
-
-	blobPrefix := fmt.Sprintf("/v2/%s/blobs/", repo)
-
-	mux.HandleFunc(blobPrefix, func(w http.ResponseWriter, r *http.Request) {
-		ref := strings.TrimPrefix(r.URL.Path, blobPrefix)
+	mux.HandleFunc(fmt.Sprintf("/v2/%s/blobs/", repo), func(w http.ResponseWriter, r *http.Request) {
+		ref := r.URL.Path[len(fmt.Sprintf("/v2/%s/blobs/", repo)):]
 
 		d, err := digest.Parse(ref)
 		if err != nil {
@@ -220,144 +187,456 @@ func serveChartBlobs(repo string, blobs map[digest.Digest][]byte) *http.ServeMux
 			return
 		}
 
-		content, ok := blobs[d]
+		data, ok := blobs[d]
 		if !ok {
 			http.NotFound(w, r)
 
 			return
 		}
 
-		writeOCIContent(w, r, "application/octet-stream", d, int64(len(content)), content)
+		w.Header().Set("Content-Length", strconv.Itoa(len(data)))
+		w.Header().Set("Docker-Content-Digest", d.String())
+		_, _ = w.Write(data)
 	})
-
-	return mux
-}
-
-// writeOCIContent serves one registry artifact. Every response advertises
-// the original digest and size while the body carries the served bytes.
-// GET bodies are flushed as chunked responses that declare no length, so
-// that transport-level length checks cannot mask the client's own
-// verification of truncated or extended bodies.
-func writeOCIContent(
-	w http.ResponseWriter,
-	r *http.Request,
-	contentType string,
-	dgst digest.Digest,
-	size int64,
-	content []byte,
-) {
-	w.Header().Set("Content-Type", contentType)
-	w.Header().Set("Docker-Content-Digest", dgst.String())
-
-	if r.Method == http.MethodHead {
-		w.Header().Set("Content-Length", strconv.Itoa(int(size)))
-
-		return
-	}
-
-	if flusher, ok := w.(http.Flusher); ok {
-		flusher.Flush()
-	}
-
-	_, _ = w.Write(content)
-}
-
-// newIntegrityRegistry starts the server for the given mux and returns the
-// registry view of the artifacts it serves. rootDigest is the digest a
-// digest-pinned pull should request.
-func newIntegrityRegistry(
-	t *testing.T,
-	mux *http.ServeMux,
-	artifacts chartArtifacts,
-	rootDigest digest.Digest,
-) *integrityRegistry {
-	t.Helper()
 
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 
-	const repo = "test/chart"
+	host := srv.Listener.Addr().String()
 
-	return &integrityRegistry{
+	return &mockOCIServer{
 		Server:         srv,
-		ref:            srv.Listener.Addr().String() + "/" + repo,
-		manifestDigest: rootDigest,
-		chartDigest:    artifacts.chartDigest,
+		ref:            host + "/" + repo,
+		manifestDigest: indexDigest,
 	}
 }
 
-// newResolvedAsRegistry answers every manifest reference with the given
-// artifacts' manifest, advertising that manifest's digest in its headers.
-// The returned manifestDigest is an unrelated valid digest that a pinned
-// pull can request.
-func newResolvedAsRegistry(t *testing.T, artifacts chartArtifacts) *integrityRegistry {
+func newMockOCIRegistryWithMixedIndex(t *testing.T, chartContent []byte) *mockOCIServer {
 	t.Helper()
 
-	const repo = "test/chart"
+	nonChartConfig := []byte(`{"type":"not-a-chart"}`)
+	nonChartConfigDigest := digest.FromBytes(nonChartConfig)
+	nonChartManifest := ocispec.Manifest{
+		MediaType: ocispec.MediaTypeImageManifest,
+		Config: ocispec.Descriptor{
+			MediaType: ocispec.MediaTypeImageConfig,
+			Digest:    nonChartConfigDigest,
+			Size:      int64(len(nonChartConfig)),
+		},
+		Layers: []ocispec.Descriptor{},
+	}
+
+	nonChartBytes, err := json.Marshal(nonChartManifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	nonChartDigest := digest.FromBytes(nonChartBytes)
+
+	chartDigest := digest.FromBytes(chartContent)
+	chartConfig := []byte(`{"name":"test-chart","version":"1.0.0"}`)
+	chartConfigDigest := digest.FromBytes(chartConfig)
+
+	chartManifest := ocispec.Manifest{
+		MediaType: ocispec.MediaTypeImageManifest,
+		Config: ocispec.Descriptor{
+			MediaType: "application/vnd.cncf.helm.config.v1+json",
+			Digest:    chartConfigDigest,
+			Size:      int64(len(chartConfig)),
+		},
+		Layers: []ocispec.Descriptor{{
+			MediaType: "application/vnd.cncf.helm.chart.content.v1.tar+gzip",
+			Digest:    chartDigest,
+			Size:      int64(len(chartContent)),
+		}},
+	}
+
+	chartManifestBytes, err := json.Marshal(chartManifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	chartManifestDigest := digest.FromBytes(chartManifestBytes)
+
+	idx := ocispec.Index{
+		MediaType: ocispec.MediaTypeImageIndex,
+		Manifests: []ocispec.Descriptor{
+			{
+				MediaType: ocispec.MediaTypeImageManifest,
+				Digest:    nonChartDigest,
+				Size:      int64(len(nonChartBytes)),
+			},
+			{
+				MediaType: ocispec.MediaTypeImageManifest,
+				Digest:    chartManifestDigest,
+				Size:      int64(len(chartManifestBytes)),
+			},
+		},
+	}
+
+	indexBytes, err := json.Marshal(idx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	indexDigest := digest.FromBytes(indexBytes)
+
+	manifests := map[digest.Digest][]byte{
+		nonChartDigest:      nonChartBytes,
+		chartManifestDigest: chartManifestBytes,
+	}
 
 	blobs := map[digest.Digest][]byte{
-		artifacts.chartDigest:  artifacts.chartContent,
-		artifacts.configDigest: artifacts.configContent,
+		chartDigest:          chartContent,
+		chartConfigDigest:    chartConfig,
+		nonChartConfigDigest: nonChartConfig,
 	}
 
-	mux := serveChartBlobs(repo, blobs)
+	const repo = "test/chart"
 
-	mux.HandleFunc(fmt.Sprintf("/v2/%s/manifests/", repo), func(w http.ResponseWriter, r *http.Request) {
-		writeOCIContent(
-			w, r,
-			ocispec.MediaTypeImageManifest,
-			artifacts.manifestDigest,
-			int64(len(artifacts.manifestBytes)),
-			artifacts.manifestBytes,
-		)
-	})
+	mux := http.NewServeMux()
 
-	return newIntegrityRegistry(t, mux, artifacts, digest.FromString("digest pinned by the caller"))
-}
+	mux.HandleFunc(
+		fmt.Sprintf("/v2/%s/manifests/", repo),
+		func(w http.ResponseWriter, r *http.Request) {
+			ref := r.URL.Path[len(fmt.Sprintf("/v2/%s/manifests/", repo)):]
+			if m, ok := manifests[digest.Digest(ref)]; ok {
+				w.Header().Set("Content-Type", ocispec.MediaTypeImageManifest)
+				w.Header().Set("Docker-Content-Digest", ref)
+				w.Header().Set("Content-Length", strconv.Itoa(len(m)))
+				_, _ = w.Write(m)
 
-// layerDescriptor builds a chart layer descriptor with the given digest and
-// size, keeping the recognised chart media type.
-func layerDescriptor(dgst string, size int64) *ocispec.Descriptor {
-	return &ocispec.Descriptor{
-		MediaType: "application/vnd.cncf.helm.chart.content.v1.tar+gzip",
-		Digest:    digest.Digest(dgst),
-		Size:      size,
-	}
-}
+				return
+			}
 
-// applyTamper returns tamper(original), or original when tamper is nil.
-func applyTamper(tamper func([]byte) []byte, original []byte) []byte {
-	if tamper == nil {
-		return original
-	}
-
-	return tamper(original)
-}
-
-// tamperJSON returns document with its schemaVersion value rewritten from 2
-// to 9. The substitution is same-length and keeps the document syntactically
-// valid, so only byte-level digest verification can detect it.
-func tamperJSON(t *testing.T, document []byte) []byte {
-	t.Helper()
-
-	const (
-		from = `"schemaVersion":2`
-		to   = `"schemaVersion":9`
+			w.Header().Set("Content-Type", ocispec.MediaTypeImageIndex)
+			w.Header().Set("Docker-Content-Digest", indexDigest.String())
+			w.Header().Set("Content-Length", strconv.Itoa(len(indexBytes)))
+			_, _ = w.Write(indexBytes)
+		},
 	)
 
-	tampered := bytes.Replace(document, []byte(from), []byte(to), 1)
-	if bytes.Equal(tampered, document) {
-		t.Fatalf("tamper substitution %q not found in document", from)
-	}
+	mux.HandleFunc(
+		fmt.Sprintf("/v2/%s/blobs/", repo),
+		func(w http.ResponseWriter, r *http.Request) {
+			ref := r.URL.Path[len(fmt.Sprintf("/v2/%s/blobs/", repo)):]
 
-	return tampered
+			d, err := digest.Parse(ref)
+			if err != nil {
+				http.Error(w, "bad digest", http.StatusBadRequest)
+
+				return
+			}
+
+			data, ok := blobs[d]
+			if !ok {
+				http.NotFound(w, r)
+
+				return
+			}
+
+			w.Header().Set("Content-Length", strconv.Itoa(len(data)))
+			w.Header().Set("Docker-Content-Digest", d.String())
+			_, _ = w.Write(data)
+		},
+	)
+
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	host := srv.Listener.Addr().String()
+
+	return &mockOCIServer{
+		Server:         srv,
+		ref:            host + "/" + repo,
+		manifestDigest: indexDigest,
+	}
 }
 
-// flipByte returns content with the byte at index i inverted. The content
-// length is preserved so only digest verification can detect the change.
-func flipByte(content []byte, i int) []byte {
-	tampered := bytes.Clone(content)
-	tampered[i] ^= 0xff
+func newMockOCIRegistryWithBrokenIndex(t *testing.T) *mockOCIServer {
+	t.Helper()
 
-	return tampered
+	fakeDigest1 := digest.FromString("broken-manifest-1")
+	fakeDigest2 := digest.FromString("broken-manifest-2")
+
+	idx := ocispec.Index{
+		MediaType: ocispec.MediaTypeImageIndex,
+		Manifests: []ocispec.Descriptor{
+			{
+				MediaType: ocispec.MediaTypeImageManifest,
+				Digest:    fakeDigest1,
+				Size:      100,
+			},
+			{
+				MediaType: ocispec.MediaTypeImageManifest,
+				Digest:    fakeDigest2,
+				Size:      100,
+			},
+		},
+	}
+
+	indexBytes, err := json.Marshal(idx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	indexDigest := digest.FromBytes(indexBytes)
+
+	const repo = "test/chart"
+
+	mux := http.NewServeMux()
+
+	mux.HandleFunc(
+		fmt.Sprintf("/v2/%s/manifests/", repo),
+		func(w http.ResponseWriter, r *http.Request) {
+			ref := r.URL.Path[len(fmt.Sprintf("/v2/%s/manifests/", repo)):]
+
+			if ref == fakeDigest1.String() || ref == fakeDigest2.String() {
+				http.Error(w, "internal server error", http.StatusInternalServerError)
+
+				return
+			}
+
+			w.Header().Set("Content-Type", ocispec.MediaTypeImageIndex)
+			w.Header().Set("Docker-Content-Digest", indexDigest.String())
+			w.Header().Set("Content-Length", strconv.Itoa(len(indexBytes)))
+			_, _ = w.Write(indexBytes)
+		},
+	)
+
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	host := srv.Listener.Addr().String()
+
+	return &mockOCIServer{
+		Server:         srv,
+		ref:            host + "/" + repo,
+		manifestDigest: indexDigest,
+	}
+}
+
+func newMockOCIRegistryWithPartiallyBrokenIndex(t *testing.T) *mockOCIServer {
+	t.Helper()
+
+	fakeDigest := digest.FromString("broken-manifest")
+
+	nonChartConfig := []byte(`{"type":"not-a-chart"}`)
+	nonChartConfigDigest := digest.FromBytes(nonChartConfig)
+	nonChartManifest := ocispec.Manifest{
+		MediaType: ocispec.MediaTypeImageManifest,
+		Config: ocispec.Descriptor{
+			MediaType: ocispec.MediaTypeImageConfig,
+			Digest:    nonChartConfigDigest,
+			Size:      int64(len(nonChartConfig)),
+		},
+		Layers: []ocispec.Descriptor{},
+	}
+
+	nonChartBytes, err := json.Marshal(nonChartManifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	nonChartDigest := digest.FromBytes(nonChartBytes)
+
+	idx := ocispec.Index{
+		MediaType: ocispec.MediaTypeImageIndex,
+		Manifests: []ocispec.Descriptor{
+			{
+				MediaType: ocispec.MediaTypeImageManifest,
+				Digest:    fakeDigest,
+				Size:      100,
+			},
+			{
+				MediaType: ocispec.MediaTypeImageManifest,
+				Digest:    nonChartDigest,
+				Size:      int64(len(nonChartBytes)),
+			},
+		},
+	}
+
+	indexBytes, err := json.Marshal(idx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	indexDigest := digest.FromBytes(indexBytes)
+
+	manifests := map[digest.Digest][]byte{
+		nonChartDigest: nonChartBytes,
+	}
+
+	const repo = "test/chart"
+
+	mux := http.NewServeMux()
+
+	mux.HandleFunc(
+		fmt.Sprintf("/v2/%s/manifests/", repo),
+		func(w http.ResponseWriter, r *http.Request) {
+			ref := r.URL.Path[len(fmt.Sprintf("/v2/%s/manifests/", repo)):]
+
+			if ref == fakeDigest.String() {
+				http.Error(w, "internal server error", http.StatusInternalServerError)
+
+				return
+			}
+
+			if m, ok := manifests[digest.Digest(ref)]; ok {
+				w.Header().Set("Content-Type", ocispec.MediaTypeImageManifest)
+				w.Header().Set("Docker-Content-Digest", ref)
+				w.Header().Set("Content-Length", strconv.Itoa(len(m)))
+				_, _ = w.Write(m)
+
+				return
+			}
+
+			w.Header().Set("Content-Type", ocispec.MediaTypeImageIndex)
+			w.Header().Set("Docker-Content-Digest", indexDigest.String())
+			w.Header().Set("Content-Length", strconv.Itoa(len(indexBytes)))
+			_, _ = w.Write(indexBytes)
+		},
+	)
+
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	host := srv.Listener.Addr().String()
+
+	return &mockOCIServer{
+		Server:         srv,
+		ref:            host + "/" + repo,
+		manifestDigest: indexDigest,
+	}
+}
+
+func newMockOCIRegistryWithEmptyIndex(t *testing.T) *mockOCIServer {
+	t.Helper()
+
+	idx := ocispec.Index{
+		MediaType: ocispec.MediaTypeImageIndex,
+		Manifests: []ocispec.Descriptor{},
+	}
+
+	indexBytes, err := json.Marshal(idx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	indexDigest := digest.FromBytes(indexBytes)
+
+	const repo = "test/chart"
+
+	mux := http.NewServeMux()
+
+	mux.HandleFunc(fmt.Sprintf("/v2/%s/manifests/", repo), func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", ocispec.MediaTypeImageIndex)
+		w.Header().Set("Docker-Content-Digest", indexDigest.String())
+		w.Header().Set("Content-Length", strconv.Itoa(len(indexBytes)))
+		_, _ = w.Write(indexBytes)
+	})
+
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	host := srv.Listener.Addr().String()
+
+	return &mockOCIServer{
+		Server:         srv,
+		ref:            host + "/" + repo,
+		manifestDigest: indexDigest,
+	}
+}
+
+func newMockOCIRegistryWithTags(t *testing.T, tags []string) *mockOCIServer {
+	t.Helper()
+
+	configContent := []byte(`{}`)
+	configDigest := digest.FromBytes(configContent)
+
+	manifest := ocispec.Manifest{
+		MediaType: ocispec.MediaTypeImageManifest,
+		Config: ocispec.Descriptor{
+			MediaType: "application/vnd.cncf.helm.config.v1+json",
+			Digest:    configDigest,
+			Size:      int64(len(configContent)),
+		},
+	}
+
+	return newMockOCIServer(t, manifest, map[digest.Digest][]byte{
+		configDigest: configContent,
+	}, tags)
+}
+
+func newMockOCIServer(
+	t *testing.T,
+	manifest ocispec.Manifest,
+	blobs map[digest.Digest][]byte,
+	tags []string,
+) *mockOCIServer {
+	t.Helper()
+
+	manifestBytes, err := json.Marshal(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	manifestDigest := digest.FromBytes(manifestBytes)
+
+	const repo = "test/chart"
+
+	mux := http.NewServeMux()
+
+	mux.HandleFunc(fmt.Sprintf("/v2/%s/manifests/", repo), func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", ocispec.MediaTypeImageManifest)
+		w.Header().Set("Docker-Content-Digest", manifestDigest.String())
+		w.Header().Set("Content-Length", strconv.Itoa(len(manifestBytes)))
+		_, _ = w.Write(manifestBytes)
+	})
+
+	mux.HandleFunc(fmt.Sprintf("/v2/%s/blobs/", repo), func(w http.ResponseWriter, r *http.Request) {
+		ref := r.URL.Path[len(fmt.Sprintf("/v2/%s/blobs/", repo)):]
+		d, err := digest.Parse(ref)
+		if err != nil {
+			http.Error(w, "bad digest", http.StatusBadRequest)
+
+			return
+		}
+
+		data, ok := blobs[d]
+		if !ok {
+			http.NotFound(w, r)
+
+			return
+		}
+
+		w.Header().Set("Content-Length", strconv.Itoa(len(data)))
+		w.Header().Set("Docker-Content-Digest", d.String())
+		_, _ = w.Write(data)
+	})
+
+	if tags != nil {
+		mux.HandleFunc(fmt.Sprintf("/v2/%s/tags/list", repo), func(w http.ResponseWriter, _ *http.Request) {
+			resp := struct {
+				Name string   `json:"name"`
+				Tags []string `json:"tags"`
+			}{
+				Name: repo,
+				Tags: tags,
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(resp)
+		})
+	}
+
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	host := srv.Listener.Addr().String()
+
+	return &mockOCIServer{
+		Server:         srv,
+		ref:            host + "/" + repo,
+		manifestDigest: manifestDigest,
+	}
 }

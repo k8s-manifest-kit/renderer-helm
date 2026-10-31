@@ -4,11 +4,6 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
-	"encoding/json"
-	"errors"
-	"fmt"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -66,27 +61,6 @@ func TestExtractChartMeta_NestedSubcharts(t *testing.T) {
 	})
 }
 
-func TestOCILocator_NonSemverTags(t *testing.T) {
-	t.Parallel()
-	g := NewWithT(t)
-
-	srv := newMockOCIRegistryWithTagList(t, []string{"latest", "dev-build", "nightly"})
-
-	oci := &locator.OCI{
-		Ref:       "oci://" + srv.ref,
-		CacheDir:  t.TempDir(),
-		PlainHTTP: true,
-	}
-
-	_, err := oci.Locate(t.Context())
-	g.Expect(err).To(HaveOccurred())
-	g.Expect(errors.Is(err, locator.ErrNoValidSemverTag)).To(BeTrue())
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 // buildChartArchive creates a .tgz archive in a temp directory containing
 // the given files (path -> content) and returns the archive path.
 func buildChartArchive(t *testing.T, files map[string]string) string {
@@ -126,48 +100,4 @@ func buildChartArchive(t *testing.T, files map[string]string) string {
 	}
 
 	return path
-}
-
-type tagOnlyOCIServer struct {
-	*httptest.Server
-
-	ref string
-}
-
-// newMockOCIRegistryWithTagList spins up a minimal mock OCI registry that only
-// serves the tag list endpoint (and the /v2/ ping). This is enough to exercise
-// the resolveTag -> latestSemver path without needing manifests or blobs.
-func newMockOCIRegistryWithTagList(t *testing.T, tags []string) *tagOnlyOCIServer {
-	t.Helper()
-
-	const repo = "test/chart"
-
-	mux := http.NewServeMux()
-
-	mux.HandleFunc("/v2/", func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	})
-
-	mux.HandleFunc(fmt.Sprintf("/v2/%s/tags/list", repo), func(w http.ResponseWriter, _ *http.Request) {
-		resp := struct {
-			Name string   `json:"name"`
-			Tags []string `json:"tags"`
-		}{
-			Name: repo,
-			Tags: tags,
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(resp)
-	})
-
-	srv := httptest.NewServer(mux)
-	t.Cleanup(srv.Close)
-
-	host := srv.Listener.Addr().String()
-
-	return &tagOnlyOCIServer{
-		Server: srv,
-		ref:    host + "/" + repo,
-	}
 }
