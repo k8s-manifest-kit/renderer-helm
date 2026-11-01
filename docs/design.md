@@ -55,6 +55,20 @@ Source values are resolved for each render and merged with render-time
 the merged values with Helm's render-value processing and renders the chart
 with the configured release name and namespace.
 
+Both value entry points are cycle-guarded before the shared clone and merge
+helpers recurse into them. Resolved source values are validated on every
+render — including warm output-cache hits, since values resolve before the
+cache lookup — and render-time values are validated per selected source
+before the per-source clone; each rejection wraps the shared
+`maps.ErrCycle`, names the chart and release, and covers the whole supported
+tree even when the overlay would replace the cyclic branch. The traversal
+matches the clone and merge types exactly — nested `map[string]any` and
+`[]any` — so shared references that do not form cycles stay valid, while
+retained values of other types, Helm template functions, and encoders are
+outside the guarantee. Deselected sources neither validate render-time
+values nor invoke their callbacks; the engine's global rejection is a
+separate, earlier boundary.
+
 When `ProcessDependencies` is enabled, Helm dependency processing runs before
 template rendering. Lint and strict modes are renderer options and are passed
 to the Helm engine behavior configured by the renderer.
