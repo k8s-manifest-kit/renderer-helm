@@ -13,6 +13,8 @@ import (
 	"testing"
 	"testing/fstest"
 
+	jqmatcher "github.com/lburgazzoli/gomega-matchers/pkg/matchers/jq"
+
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	"github.com/k8s-manifest-kit/engine/pkg/types"
@@ -257,7 +259,7 @@ func assertCollisionRender(
 	for i, marker := range markers {
 		g.Expect(objects[i].GetKind()).To(Equal("ConfigMap"))
 		g.Expect(objects[i].GetName()).To(Equal(cacheCollisionConfigMapName(releaseName)))
-		g.Expect(configMapData(g, &objects[i])).To(HaveKeyWithValue("source", marker))
+		g.Expect(objects[i].Object).To(WithTransform(jqmatcher.Extract(".data"), HaveKeyWithValue("source", marker)))
 	}
 
 	assertRenderOrigin(g, objects, origin)

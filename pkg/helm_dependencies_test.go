@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"testing"
 
+	jqmatcher "github.com/lburgazzoli/gomega-matchers/pkg/matchers/jq"
+
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	"github.com/k8s-manifest-kit/engine/pkg/types"
@@ -123,22 +125,27 @@ func TestRenderer_ValuesPrecedence(t *testing.T) {
 		return renderer
 	}
 
-	parentData := func(t *testing.T, g *WithT, objects []unstructured.Unstructured) map[string]any {
+	parentConfigMap := func(t *testing.T, g *WithT, objects []unstructured.Unstructured) *unstructured.Unstructured {
 		t.Helper()
 
 		parent := findConfigMap(objects, "deps-precedence-parent-config")
 		g.Expect(parent).ToNot(BeNil())
 
-		return configMapData(g, parent)
+		return parent
 	}
 
-	childData := func(t *testing.T, g *WithT, objects []unstructured.Unstructured, name string) map[string]any {
+	childConfigMap := func(
+		t *testing.T,
+		g *WithT,
+		objects []unstructured.Unstructured,
+		name string,
+	) *unstructured.Unstructured {
 		t.Helper()
 
 		child := findConfigMap(objects, "deps-precedence-"+name+"-config")
 		g.Expect(child).ToNot(BeNil())
 
-		return configMapData(g, child)
+		return child
 	}
 
 	t.Run("should apply chart defaults without overrides", func(t *testing.T) {
@@ -148,18 +155,22 @@ func TestRenderer_ValuesPrecedence(t *testing.T) {
 		objects, err := newRenderer(t, g, nil).Process(t.Context(), nil)
 		g.Expect(err).ToNot(HaveOccurred())
 
-		data := parentData(t, g, objects)
-		g.Expect(data).To(HaveKeyWithValue("greeting", parentDefaultGreeting))
-		g.Expect(data).To(HaveKeyWithValue("overridden", "parent-default-overridden"))
-		g.Expect(data).To(HaveKeyWithValue("nested-key", "parent-default-nested-key"))
-		g.Expect(data).To(HaveKeyWithValue("nested-extra", "parent-default-nested-extra"))
-		// import-values from child-a are merged into the parent defaults
-		// during dependency processing.
-		g.Expect(data).To(HaveKeyWithValue("imported-data", childAExportData))
+		parent := parentConfigMap(t, g, objects)
+		g.Expect(parent.Object).To(WithTransform(jqmatcher.Extract(".data"), SatisfyAll(
+			HaveKeyWithValue("greeting", parentDefaultGreeting),
+			HaveKeyWithValue("overridden", "parent-default-overridden"),
+			HaveKeyWithValue("nested-key", "parent-default-nested-key"),
+			HaveKeyWithValue("nested-extra", "parent-default-nested-extra"),
+			// import-values from child-a are merged into the parent defaults
+			// during dependency processing.
+			HaveKeyWithValue("imported-data", childAExportData),
+		)))
 
-		childA := childData(t, g, objects, "child-a")
-		g.Expect(childA).To(HaveKeyWithValue("message", childADefaultMessage))
-		g.Expect(childA).To(HaveKeyWithValue("keep", childADefaultKeep))
+		childA := childConfigMap(t, g, objects, "child-a")
+		g.Expect(childA.Object).To(WithTransform(jqmatcher.Extract(".data"), SatisfyAll(
+			HaveKeyWithValue("message", childADefaultMessage),
+			HaveKeyWithValue("keep", childADefaultKeep),
+		)))
 	})
 
 	t.Run("should let source values override chart defaults with nested merging", func(t *testing.T) {
@@ -181,17 +192,21 @@ func TestRenderer_ValuesPrecedence(t *testing.T) {
 		objects, err := newRenderer(t, g, sourceValues).Process(t.Context(), nil)
 		g.Expect(err).ToNot(HaveOccurred())
 
-		data := parentData(t, g, objects)
-		g.Expect(data).To(HaveKeyWithValue("greeting", "source-greeting"))
-		// Nested maps merge: the untouched sibling key keeps its default.
-		g.Expect(data).To(HaveKeyWithValue("nested-key", "source-nested-key"))
-		g.Expect(data).To(HaveKeyWithValue("nested-extra", "parent-default-nested-extra"))
-		g.Expect(data).To(HaveKeyWithValue("overridden", "parent-default-overridden"))
+		parent := parentConfigMap(t, g, objects)
+		g.Expect(parent.Object).To(WithTransform(jqmatcher.Extract(".data"), SatisfyAll(
+			HaveKeyWithValue("greeting", "source-greeting"),
+			// Nested maps merge: the untouched sibling key keeps its default.
+			HaveKeyWithValue("nested-key", "source-nested-key"),
+			HaveKeyWithValue("nested-extra", "parent-default-nested-extra"),
+			HaveKeyWithValue("overridden", "parent-default-overridden"),
+		)))
 
 		// Subchart values merge the same way.
-		childA := childData(t, g, objects, "child-a")
-		g.Expect(childA).To(HaveKeyWithValue("message", "source-child-a-message"))
-		g.Expect(childA).To(HaveKeyWithValue("keep", childADefaultKeep))
+		childA := childConfigMap(t, g, objects, "child-a")
+		g.Expect(childA.Object).To(WithTransform(jqmatcher.Extract(".data"), SatisfyAll(
+			HaveKeyWithValue("message", "source-child-a-message"),
+			HaveKeyWithValue("keep", childADefaultKeep),
+		)))
 	})
 
 	t.Run("should let render-time values override source values and chart defaults", func(t *testing.T) {
@@ -217,14 +232,16 @@ func TestRenderer_ValuesPrecedence(t *testing.T) {
 		objects, err := newRenderer(t, g, sourceValues).Process(t.Context(), renderTimeValues)
 		g.Expect(err).ToNot(HaveOccurred())
 
-		data := parentData(t, g, objects)
-		// chart-default < source < render-time.
-		g.Expect(data).To(HaveKeyWithValue("greeting", "render-time-greeting"))
-		g.Expect(data).To(HaveKeyWithValue("nested-key", "render-time-nested-key"))
-		// Keys only set at a lower precedence level keep their values.
-		g.Expect(data).To(HaveKeyWithValue("nested-extra", "parent-default-nested-extra"))
-		// User values also override values imported from subcharts.
-		g.Expect(data).To(HaveKeyWithValue("imported-data", "render-time-imported"))
+		parent := parentConfigMap(t, g, objects)
+		g.Expect(parent.Object).To(WithTransform(jqmatcher.Extract(".data"), SatisfyAll(
+			// chart-default < source < render-time.
+			HaveKeyWithValue("greeting", "render-time-greeting"),
+			HaveKeyWithValue("nested-key", "render-time-nested-key"),
+			// Keys only set at a lower precedence level keep their values.
+			HaveKeyWithValue("nested-extra", "parent-default-nested-extra"),
+			// User values also override values imported from subcharts.
+			HaveKeyWithValue("imported-data", "render-time-imported"),
+		)))
 	})
 
 	t.Run("should not mutate source and render-time input maps", func(t *testing.T) {
@@ -279,13 +296,19 @@ func TestRenderer_ImportValuesSnapshotIsolation(t *testing.T) {
 	// overwrites it. The first render reads the pristine value...
 	firstObjects, err := renderer.Process(t.Context(), nil)
 	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(configMapData(g, findConfigMap(firstObjects, "import-values-probe"))["child"]).To(Equal("exports"))
+
+	probe := findConfigMap(firstObjects, "import-values-probe")
+	g.Expect(probe).ToNot(BeNil())
+	g.Expect(probe.Object).To(WithTransform(jqmatcher.Extract(".data"), HaveKeyWithValue("child", "exports")))
 
 	// ...and so must every later render: the first render's in-place
 	// mutation must stay confined to its own chart copy.
 	secondObjects, err := renderer.Process(t.Context(), nil)
 	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(configMapData(g, findConfigMap(secondObjects, "import-values-probe"))["child"]).To(Equal("exports"))
+
+	secondProbe := findConfigMap(secondObjects, "import-values-probe")
+	g.Expect(secondProbe).ToNot(BeNil())
+	g.Expect(secondProbe.Object).To(WithTransform(jqmatcher.Extract(".data"), HaveKeyWithValue("child", "exports")))
 }
 
 // TestRenderer_DependencyAlias covers a dependency referenced through an
@@ -318,9 +341,10 @@ func TestRenderer_DependencyAlias(t *testing.T) {
 	child := findConfigMap(objects, "deps-alias-child-c-config")
 	g.Expect(child).ToNot(BeNil())
 
-	data := configMapData(g, child)
-	g.Expect(data).To(HaveKeyWithValue("message", "aliased-message"))
-	g.Expect(data).To(HaveKeyWithValue("keep", childCDefaultKeep))
+	g.Expect(child.Object).To(WithTransform(jqmatcher.Extract(".data"), SatisfyAll(
+		HaveKeyWithValue("message", "aliased-message"),
+		HaveKeyWithValue("keep", childCDefaultKeep),
+	)))
 }
 
 // TestRenderer_DependencyEmissionOrder covers a chart with multiple
@@ -356,7 +380,10 @@ func TestRenderer_DependencyEmissionOrder(t *testing.T) {
 			if !processDeps {
 				expectedImported = notImportedFallbackData
 			}
-			g.Expect(configMapData(g, parent)).To(HaveKeyWithValue("imported-data", expectedImported))
+			g.Expect(parent.Object).To(WithTransform(
+				jqmatcher.Extract(".data"),
+				HaveKeyWithValue("imported-data", expectedImported),
+			))
 
 			for range 5 {
 				next, err := renderer.Process(t.Context(), nil)

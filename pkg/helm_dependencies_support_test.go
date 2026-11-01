@@ -4,6 +4,8 @@ import (
 	"sync"
 	"testing"
 
+	jqmatcher "github.com/lburgazzoli/gomega-matchers/pkg/matchers/jq"
+
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	helm "github.com/k8s-manifest-kit/renderer-helm/pkg"
@@ -89,7 +91,7 @@ func assertDependencyRender(
 
 	parent := findConfigMap(objects, releaseName+"-parent-config")
 	g.Expect(parent).ToNot(BeNil(), "parent ConfigMap should be rendered")
-	g.Expect(configMapData(g, parent)).To(HaveKeyWithValue("greeting", exp.greeting))
+	g.Expect(parent.Object).To(WithTransform(jqmatcher.Extract(".data"), HaveKeyWithValue("greeting", exp.greeting)))
 }
 
 // objectIdentity returns the kind/name identity of a rendered object.

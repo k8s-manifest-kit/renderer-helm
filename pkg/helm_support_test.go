@@ -83,15 +83,6 @@ func mapChartFS(t *testing.T) fstest.MapFS {
 	return chartFS
 }
 
-// configMapData returns the data section of a ConfigMap object.
-func configMapData(g *WithT, object *unstructured.Unstructured) map[string]any {
-	data, found, err := unstructured.NestedMap(object.Object, "data")
-	g.Expect(err).ToNot(HaveOccurred())
-	g.Expect(found).To(BeTrue(), "ConfigMap %q should have a data section", object.GetName())
-
-	return data
-}
-
 // assertRenderOrigin checks that every object carries the expected
 // render-origin annotation.
 func assertRenderOrigin(g *WithT, objects []unstructured.Unstructured, origin string) {
