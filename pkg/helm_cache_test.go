@@ -266,6 +266,19 @@ func TestCacheIntegration(t *testing.T) {
 				types.RenderOriginCache,
 			))
 		}
+
+		// A warm hit is origin-only: the batch was stored before the live
+		// origin annotation, so the hit re-serves the exact source fields and
+		// hash bytes captured on the live render and only swaps the origin.
+		for i := range result1 {
+			live := result1[i].GetAnnotations()
+			warm := result2[i].GetAnnotations()
+
+			g.Expect(warm[types.AnnotationSourceType]).To(Equal("helm"))
+			g.Expect(warm[types.AnnotationSourcePath]).To(Equal(testChartPath))
+			g.Expect(warm[types.AnnotationSourceFile]).To(Equal(live[types.AnnotationSourceFile]))
+			g.Expect(warm[types.AnnotationContentHash]).To(Equal(live[types.AnnotationContentHash]))
+		}
 	})
 
 	t.Run("should miss cache on different values", func(t *testing.T) {

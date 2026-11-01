@@ -2,12 +2,204 @@ package helm_test
 
 import (
 	"testing"
+	"testing/fstest"
+
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	"github.com/k8s-manifest-kit/engine/pkg/types"
+	"github.com/k8s-manifest-kit/pkg/util/k8s"
 	helm "github.com/k8s-manifest-kit/renderer-helm/pkg"
 
 	. "github.com/onsi/gomega"
 )
+
+// annotatedChartName is the chart name of the in-memory fixture whose
+// template carries its own annotations.
+const annotatedChartName = "annotated-app"
+
+// annotatedChartTmpl renders a ConfigMap that ships its own annotations,
+// including stale kit-managed keys, to characterize how renderer annotation
+// phases interact with pre-existing metadata.
+const annotatedChartTmpl = `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-annotated
+  annotations:
+    existing: annotation
+    manifests.k8s-manifests-kit/content.hash: sha256:stale
+    manifests.k8s-manifests-kit/render.origin: stale
+data:
+  key: value
+`
+
+// annotatedChartFS returns an in-memory chart whose single template emits an
+// object with pre-existing annotations.
+func annotatedChartFS() fstest.MapFS {
+	return fstest.MapFS{
+		"chart/Chart.yaml": &fstest.MapFile{
+			Data: []byte("apiVersion: v2\nname: " + annotatedChartName + "\nversion: 1.0.0\n"),
+			Mode: 0o644,
+		},
+		"chart/values.yaml": &fstest.MapFile{
+			Data: []byte("replicaCount: 1\n"),
+			Mode: 0o644,
+		},
+		"chart/templates/annotated.yaml": &fstest.MapFile{
+			Data: []byte(annotatedChartTmpl),
+			Mode: 0o644,
+		},
+	}
+}
+
+// renderSimpleChart renders the checked-in simple-app chart with the given
+// renderer options and returns the bare result.
+func renderSimpleChart(t *testing.T, opts ...helm.RendererOption) []unstructured.Unstructured {
+	t.Helper()
+
+	g := NewWithT(t)
+
+	renderer, err := helm.New([]helm.Source{
+		{
+			Chart:       testChartPath,
+			ReleaseName: "annotation-app",
+			Values:      helm.Values(map[string]any{"replicaCount": 1}),
+		},
+	}, opts...)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	objects, err := renderer.Process(t.Context(), nil)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	return objects
+}
+
+// renderAnnotatedChart renders the in-memory annotated-annotation chart with
+// the given renderer options and returns the bare result.
+func renderAnnotatedChart(t *testing.T, opts ...helm.RendererOption) []unstructured.Unstructured {
+	t.Helper()
+
+	g := NewWithT(t)
+
+	renderer, err := helm.New([]helm.Source{
+		{
+			FS:          annotatedChartFS(),
+			Chart:       "chart",
+			ReleaseName: "annotation-app",
+		},
+	}, opts...)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	objects, err := renderer.Process(t.Context(), nil)
+	g.Expect(err).ToNot(HaveOccurred())
+
+	return objects
+}
+
+// TestAnnotationApplication characterizes how source annotations, content
+// hashes, and render origins are applied to CRDs and rendered templates.
+func TestAnnotationApplication(t *testing.T) {
+
+	t.Run("exact annotation map for CRDs and templates with hash over source metadata before origin", func(t *testing.T) {
+		g := NewWithT(t)
+
+		// CRDs are processed before templates; template files follow sorted
+		// key order.
+		expectedFiles := []string{
+			"crds/application-crd.yaml",
+			"simple-app/templates/deployment.yaml",
+			"simple-app/templates/service.yaml",
+		}
+		expectedKinds := []string{"CustomResourceDefinition", "Deployment", "Service"}
+
+		bare := renderSimpleChart(t, helm.WithContentHash(false))
+		annotated := renderSimpleChart(t, helm.WithSourceAnnotations(true))
+
+		g.Expect(bare).To(HaveLen(3))
+		g.Expect(annotated).To(HaveLen(3))
+
+		for i := range annotated {
+			g.Expect(annotated[i].GetKind()).To(Equal(expectedKinds[i]))
+
+			expected := bare[i].DeepCopy()
+			expected.SetAnnotations(map[string]string{
+				types.AnnotationSourceType: "helm",
+				types.AnnotationSourcePath: testChartPath,
+				types.AnnotationSourceFile: expectedFiles[i],
+			})
+
+			g.Expect(annotated[i].GetAnnotations()).To(Equal(map[string]string{
+				types.AnnotationSourceType:   "helm",
+				types.AnnotationSourcePath:   testChartPath,
+				types.AnnotationSourceFile:   expectedFiles[i],
+				types.AnnotationContentHash:  k8s.ContentHash(expected),
+				types.AnnotationRenderOrigin: types.RenderOriginLive,
+			}))
+		}
+	})
+
+	t.Run("pre-existing template annotations are preserved and included in the hash input", func(t *testing.T) {
+		g := NewWithT(t)
+
+		bare := renderAnnotatedChart(t, helm.WithContentHash(false))
+		annotated := renderAnnotatedChart(t, helm.WithSourceAnnotations(true))
+
+		g.Expect(bare).To(HaveLen(1))
+		g.Expect(annotated).To(HaveLen(1))
+
+		expected := bare[0].DeepCopy()
+		expected.SetAnnotations(map[string]string{
+			"existing":                   "annotation",
+			types.AnnotationContentHash:  "sha256:stale",
+			types.AnnotationRenderOrigin: "stale",
+			types.AnnotationSourceType:   "helm",
+			types.AnnotationSourcePath:   "chart",
+			types.AnnotationSourceFile:   annotatedChartName + "/templates/annotated.yaml",
+		})
+
+		annotations := annotated[0].GetAnnotations()
+		g.Expect(annotations).To(HaveKeyWithValue("existing", "annotation"))
+		g.Expect(annotations).To(HaveKeyWithValue(
+			types.AnnotationContentHash,
+			k8s.ContentHash(expected),
+		))
+		g.Expect(annotations).NotTo(HaveKeyWithValue(types.AnnotationContentHash, "sha256:stale"))
+		g.Expect(annotations).To(HaveKeyWithValue(types.AnnotationRenderOrigin, types.RenderOriginLive))
+	})
+
+	t.Run("source annotations without content hash leave no hash key", func(t *testing.T) {
+		g := NewWithT(t)
+
+		annotated := renderSimpleChart(t,
+			helm.WithSourceAnnotations(true),
+			helm.WithContentHash(false),
+		)
+
+		for i := range annotated {
+			annotations := annotated[i].GetAnnotations()
+			g.Expect(annotations).To(HaveKeyWithValue(types.AnnotationSourceType, "helm"))
+			g.Expect(annotations).To(HaveKeyWithValue(types.AnnotationSourcePath, testChartPath))
+			g.Expect(annotations).To(HaveKey(types.AnnotationSourceFile))
+			g.Expect(annotations).To(HaveKeyWithValue(types.AnnotationRenderOrigin, types.RenderOriginLive))
+			g.Expect(annotations).NotTo(HaveKey(types.AnnotationContentHash))
+		}
+	})
+
+	t.Run("disabled source annotations inject no origin key", func(t *testing.T) {
+		g := NewWithT(t)
+
+		// Content hashes default to enabled.
+		defaults := renderSimpleChart(t)
+
+		for i := range defaults {
+			annotations := defaults[i].GetAnnotations()
+			g.Expect(annotations).To(HaveKey(types.AnnotationContentHash))
+			g.Expect(annotations).NotTo(HaveKey(types.AnnotationSourceType))
+			g.Expect(annotations).NotTo(HaveKey(types.AnnotationSourcePath))
+			g.Expect(annotations).NotTo(HaveKey(types.AnnotationSourceFile))
+			g.Expect(annotations).NotTo(HaveKey(types.AnnotationRenderOrigin))
+		}
+	})
+}
 
 func TestReleaseNamespace(t *testing.T) {
 

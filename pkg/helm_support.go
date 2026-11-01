@@ -224,9 +224,7 @@ func (r *Renderer) addContentHash(objects []unstructured.Unstructured) {
 		return
 	}
 
-	for i := range objects {
-		types.SetContentHash(&objects[i])
-	}
+	types.AnnotateObjects(objects, types.WithContentHash(true))
 }
 
 // addSourceAnnotations adds source tracking annotations to a slice of unstructured objects.
@@ -240,18 +238,11 @@ func (r *Renderer) addSourceAnnotations(
 		return
 	}
 
-	for i := range objects {
-		annotations := objects[i].GetAnnotations()
-		if annotations == nil {
-			annotations = make(map[string]string)
-		}
-
-		annotations[types.AnnotationSourceType] = rendererType
-		annotations[types.AnnotationSourcePath] = chartPath
-		annotations[types.AnnotationSourceFile] = fileName
-
-		objects[i].SetAnnotations(annotations)
-	}
+	types.AnnotateObjects(objects, types.WithSourceAnnotations(map[string]string{
+		types.AnnotationSourceType: rendererType,
+		types.AnnotationSourcePath: chartPath,
+		types.AnnotationSourceFile: fileName,
+	}))
 }
 
 // addRenderOrigin adds the render-origin annotation when source annotations are enabled.
@@ -263,9 +254,7 @@ func (r *Renderer) addRenderOrigin(
 		return
 	}
 
-	for i := range objects {
-		types.SetRenderOrigin(&objects[i], origin)
-	}
+	types.AnnotateObjects(objects, types.WithRenderOrigin(origin))
 }
 
 // processCRDs extracts and processes CRD objects from a Helm chart.
