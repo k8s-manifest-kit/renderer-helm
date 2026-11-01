@@ -1,7 +1,6 @@
 package container_test
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/k8s-manifest-kit/renderer-helm/pkg/container"
@@ -83,7 +82,7 @@ func TestClient_Pull(t *testing.T) {
 		chartContent := []byte("fake-chart-tgz-content")
 		srv := newMockOCIRegistry(t, chartContent)
 
-		client, err := container.NewClient(srv.ref, container.WithPlainHTTP(true))
+		client, err := container.NewClient(srv.ref, container.WithPlainHTTP(true), container.WithHTTPClient(testHTTPClient()))
 		g.Expect(err).ToNot(HaveOccurred())
 
 		data, err := client.Pull(t.Context(), "1.0.0")
@@ -99,7 +98,7 @@ func TestClient_Pull(t *testing.T) {
 		lastContent := []byte("last-chart")
 		srv := newMockOCIRegistryMultiLayer(t, firstContent, lastContent)
 
-		client, err := container.NewClient(srv.ref, container.WithPlainHTTP(true))
+		client, err := container.NewClient(srv.ref, container.WithPlainHTTP(true), container.WithHTTPClient(testHTTPClient()))
 		g.Expect(err).ToNot(HaveOccurred())
 
 		data, err := client.Pull(t.Context(), "1.0.0")
@@ -113,7 +112,7 @@ func TestClient_Pull(t *testing.T) {
 
 		srv := newMockOCIRegistryNoChartLayer(t)
 
-		client, err := container.NewClient(srv.ref, container.WithPlainHTTP(true))
+		client, err := container.NewClient(srv.ref, container.WithPlainHTTP(true), container.WithHTTPClient(testHTTPClient()))
 		g.Expect(err).ToNot(HaveOccurred())
 
 		_, err = client.Pull(t.Context(), "1.0.0")
@@ -132,7 +131,7 @@ func TestClient_PullDigest(t *testing.T) {
 		chartContent := []byte("digest-pinned-chart-content")
 		srv := newMockOCIRegistry(t, chartContent)
 
-		client, err := container.NewClient(srv.ref, container.WithPlainHTTP(true))
+		client, err := container.NewClient(srv.ref, container.WithPlainHTTP(true), container.WithHTTPClient(testHTTPClient()))
 		g.Expect(err).ToNot(HaveOccurred())
 
 		data, err := client.PullDigest(t.Context(), srv.manifestDigest)
@@ -148,7 +147,7 @@ func TestClient_PullDigest(t *testing.T) {
 		lastContent := []byte("last-chart-digest")
 		srv := newMockOCIRegistryMultiLayer(t, firstContent, lastContent)
 
-		client, err := container.NewClient(srv.ref, container.WithPlainHTTP(true))
+		client, err := container.NewClient(srv.ref, container.WithPlainHTTP(true), container.WithHTTPClient(testHTTPClient()))
 		g.Expect(err).ToNot(HaveOccurred())
 
 		data, err := client.PullDigest(t.Context(), srv.manifestDigest)
@@ -162,7 +161,7 @@ func TestClient_PullDigest(t *testing.T) {
 
 		srv := newMockOCIRegistryNoChartLayer(t)
 
-		client, err := container.NewClient(srv.ref, container.WithPlainHTTP(true))
+		client, err := container.NewClient(srv.ref, container.WithPlainHTTP(true), container.WithHTTPClient(testHTTPClient()))
 		g.Expect(err).ToNot(HaveOccurred())
 
 		_, err = client.PullDigest(t.Context(), srv.manifestDigest)
@@ -181,7 +180,7 @@ func TestClient_PullIndex(t *testing.T) {
 		chartContent := []byte("index-resolved-chart")
 		srv := newMockOCIRegistryWithIndex(t, chartContent)
 
-		client, err := container.NewClient(srv.ref, container.WithPlainHTTP(true))
+		client, err := container.NewClient(srv.ref, container.WithPlainHTTP(true), container.WithHTTPClient(testHTTPClient()))
 		g.Expect(err).ToNot(HaveOccurred())
 
 		data, err := client.Pull(t.Context(), "1.0.0")
@@ -196,7 +195,7 @@ func TestClient_PullIndex(t *testing.T) {
 		chartContent := []byte("correct-chart-from-second-manifest")
 		srv := newMockOCIRegistryWithMixedIndex(t, chartContent)
 
-		client, err := container.NewClient(srv.ref, container.WithPlainHTTP(true))
+		client, err := container.NewClient(srv.ref, container.WithPlainHTTP(true), container.WithHTTPClient(testHTTPClient()))
 		g.Expect(err).ToNot(HaveOccurred())
 
 		data, err := client.Pull(t.Context(), "1.0.0")
@@ -210,7 +209,7 @@ func TestClient_PullIndex(t *testing.T) {
 
 		srv := newMockOCIRegistryWithBrokenIndex(t)
 
-		client, err := container.NewClient(srv.ref, container.WithPlainHTTP(true))
+		client, err := container.NewClient(srv.ref, container.WithPlainHTTP(true), container.WithHTTPClient(testHTTPClient()))
 		g.Expect(err).ToNot(HaveOccurred())
 
 		_, err = client.Pull(t.Context(), "1.0.0")
@@ -225,7 +224,7 @@ func TestClient_PullIndex(t *testing.T) {
 
 		srv := newMockOCIRegistryWithPartiallyBrokenIndex(t)
 
-		client, err := container.NewClient(srv.ref, container.WithPlainHTTP(true))
+		client, err := container.NewClient(srv.ref, container.WithPlainHTTP(true), container.WithHTTPClient(testHTTPClient()))
 		g.Expect(err).ToNot(HaveOccurred())
 
 		_, err = client.Pull(t.Context(), "1.0.0")
@@ -244,7 +243,7 @@ func TestClient_Tags(t *testing.T) {
 
 		srv := newMockOCIRegistryWithTags(t, []string{"1.0.0", "2.0.0", "3.0.0"})
 
-		client, err := container.NewClient(srv.ref, container.WithPlainHTTP(true))
+		client, err := container.NewClient(srv.ref, container.WithPlainHTTP(true), container.WithHTTPClient(testHTTPClient()))
 		g.Expect(err).ToNot(HaveOccurred())
 
 		tags, err := client.Tags(t.Context())
@@ -258,7 +257,7 @@ func TestClient_Tags(t *testing.T) {
 
 		srv := newMockOCIRegistryWithTags(t, []string{"1.0.0_build.1", "2.0.0_rc.1"})
 
-		client, err := container.NewClient(srv.ref, container.WithPlainHTTP(true))
+		client, err := container.NewClient(srv.ref, container.WithPlainHTTP(true), container.WithHTTPClient(testHTTPClient()))
 		g.Expect(err).ToNot(HaveOccurred())
 
 		tags, err := client.Tags(t.Context())
@@ -273,12 +272,12 @@ func TestClient_Pull_EmptyTag(t *testing.T) {
 
 	srv := newMockOCIRegistry(t, []byte("chart"))
 
-	client, err := container.NewClient(srv.ref, container.WithPlainHTTP(true))
+	client, err := container.NewClient(srv.ref, container.WithPlainHTTP(true), container.WithHTTPClient(testHTTPClient()))
 	g.Expect(err).ToNot(HaveOccurred())
 
 	_, err = client.Pull(t.Context(), "")
 	g.Expect(err).To(HaveOccurred())
-	g.Expect(errors.Is(err, container.ErrEmptyTag)).To(BeTrue())
+	g.Expect(err).To(MatchError(container.ErrEmptyTag))
 }
 
 func TestClient_PullDigest_InvalidDigest(t *testing.T) {
@@ -287,12 +286,12 @@ func TestClient_PullDigest_InvalidDigest(t *testing.T) {
 
 	srv := newMockOCIRegistry(t, []byte("chart"))
 
-	client, err := container.NewClient(srv.ref, container.WithPlainHTTP(true))
+	client, err := container.NewClient(srv.ref, container.WithPlainHTTP(true), container.WithHTTPClient(testHTTPClient()))
 	g.Expect(err).ToNot(HaveOccurred())
 
 	_, err = client.PullDigest(t.Context(), "")
 	g.Expect(err).To(HaveOccurred())
-	g.Expect(errors.Is(err, container.ErrInvalidDigest)).To(BeTrue())
+	g.Expect(err).To(MatchError(container.ErrInvalidDigest))
 }
 
 func TestClient_SentinelErrors(t *testing.T) {
@@ -304,12 +303,12 @@ func TestClient_SentinelErrors(t *testing.T) {
 
 		srv := newMockOCIRegistryNoChartLayer(t)
 
-		client, err := container.NewClient(srv.ref, container.WithPlainHTTP(true))
+		client, err := container.NewClient(srv.ref, container.WithPlainHTTP(true), container.WithHTTPClient(testHTTPClient()))
 		g.Expect(err).ToNot(HaveOccurred())
 
 		_, err = client.Pull(t.Context(), "1.0.0")
 		g.Expect(err).To(HaveOccurred())
-		g.Expect(errors.Is(err, container.ErrNoChartLayer)).To(BeTrue())
+		g.Expect(err).To(MatchError(container.ErrNoChartLayer))
 	})
 
 	t.Run("should return ErrEmptyIndex when index has no manifests", func(t *testing.T) {
@@ -318,11 +317,11 @@ func TestClient_SentinelErrors(t *testing.T) {
 
 		srv := newMockOCIRegistryWithEmptyIndex(t)
 
-		client, err := container.NewClient(srv.ref, container.WithPlainHTTP(true))
+		client, err := container.NewClient(srv.ref, container.WithPlainHTTP(true), container.WithHTTPClient(testHTTPClient()))
 		g.Expect(err).ToNot(HaveOccurred())
 
 		_, err = client.Pull(t.Context(), "1.0.0")
 		g.Expect(err).To(HaveOccurred())
-		g.Expect(errors.Is(err, container.ErrEmptyIndex)).To(BeTrue())
+		g.Expect(err).To(MatchError(container.ErrEmptyIndex))
 	})
 }

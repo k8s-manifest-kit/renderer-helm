@@ -1,7 +1,6 @@
 package container_test
 
 import (
-	"errors"
 	"io"
 	"testing"
 
@@ -31,14 +30,14 @@ func TestClient_Pull_Integrity(t *testing.T) {
 			},
 		})
 
-		client, err := container.NewClient(srv.ref, container.WithPlainHTTP(true))
+		client, err := container.NewClient(srv.ref, container.WithPlainHTTP(true), container.WithHTTPClient(testHTTPClient()))
 		g.Expect(err).ToNot(HaveOccurred())
 
 		data, err := client.Pull(t.Context(), "1.0.0")
 		g.Expect(err).To(HaveOccurred())
 		g.Expect(data).To(BeNil())
-		g.Expect(errors.Is(err, container.ErrContentMismatch)).To(BeTrue())
-		g.Expect(errors.Is(err, content.ErrMismatchedDigest)).To(BeTrue())
+		g.Expect(err).To(MatchError(container.ErrContentMismatch))
+		g.Expect(err).To(MatchError(content.ErrMismatchedDigest))
 		g.Expect(err.Error()).To(ContainSubstring(srv.manifestDigest.String()))
 	})
 
@@ -52,13 +51,13 @@ func TestClient_Pull_Integrity(t *testing.T) {
 			},
 		})
 
-		client, err := container.NewClient(srv.ref, container.WithPlainHTTP(true))
+		client, err := container.NewClient(srv.ref, container.WithPlainHTTP(true), container.WithHTTPClient(testHTTPClient()))
 		g.Expect(err).ToNot(HaveOccurred())
 
 		data, err := client.Pull(t.Context(), "1.0.0")
 		g.Expect(err).To(HaveOccurred())
 		g.Expect(data).To(BeNil())
-		g.Expect(errors.Is(err, container.ErrContentMismatch)).To(BeTrue())
+		g.Expect(err).To(MatchError(container.ErrContentMismatch))
 		g.Expect(err.Error()).To(ContainSubstring(srv.chartDigest.String()))
 	})
 
@@ -72,12 +71,12 @@ func TestClient_Pull_Integrity(t *testing.T) {
 			},
 		})
 
-		client, err := container.NewClient(srv.ref, container.WithPlainHTTP(true))
+		client, err := container.NewClient(srv.ref, container.WithPlainHTTP(true), container.WithHTTPClient(testHTTPClient()))
 		g.Expect(err).ToNot(HaveOccurred())
 
 		_, err = client.Pull(t.Context(), "1.0.0")
 		g.Expect(err).To(HaveOccurred())
-		g.Expect(errors.Is(err, io.ErrUnexpectedEOF)).To(BeTrue())
+		g.Expect(err).To(MatchError(io.ErrUnexpectedEOF))
 		g.Expect(err.Error()).To(ContainSubstring(srv.manifestDigest.String()))
 	})
 
@@ -91,12 +90,12 @@ func TestClient_Pull_Integrity(t *testing.T) {
 			},
 		})
 
-		client, err := container.NewClient(srv.ref, container.WithPlainHTTP(true))
+		client, err := container.NewClient(srv.ref, container.WithPlainHTTP(true), container.WithHTTPClient(testHTTPClient()))
 		g.Expect(err).ToNot(HaveOccurred())
 
 		_, err = client.Pull(t.Context(), "1.0.0")
 		g.Expect(err).To(HaveOccurred())
-		g.Expect(errors.Is(err, content.ErrTrailingData)).To(BeTrue())
+		g.Expect(err).To(MatchError(content.ErrTrailingData))
 		g.Expect(err.Error()).To(ContainSubstring(srv.manifestDigest.String()))
 	})
 
@@ -110,12 +109,12 @@ func TestClient_Pull_Integrity(t *testing.T) {
 			},
 		})
 
-		client, err := container.NewClient(srv.ref, container.WithPlainHTTP(true))
+		client, err := container.NewClient(srv.ref, container.WithPlainHTTP(true), container.WithHTTPClient(testHTTPClient()))
 		g.Expect(err).ToNot(HaveOccurred())
 
 		_, err = client.Pull(t.Context(), "1.0.0")
 		g.Expect(err).To(HaveOccurred())
-		g.Expect(errors.Is(err, io.ErrUnexpectedEOF)).To(BeTrue())
+		g.Expect(err).To(MatchError(io.ErrUnexpectedEOF))
 		g.Expect(err.Error()).To(ContainSubstring(srv.chartDigest.String()))
 	})
 
@@ -129,12 +128,12 @@ func TestClient_Pull_Integrity(t *testing.T) {
 			},
 		})
 
-		client, err := container.NewClient(srv.ref, container.WithPlainHTTP(true))
+		client, err := container.NewClient(srv.ref, container.WithPlainHTTP(true), container.WithHTTPClient(testHTTPClient()))
 		g.Expect(err).ToNot(HaveOccurred())
 
 		_, err = client.Pull(t.Context(), "1.0.0")
 		g.Expect(err).To(HaveOccurred())
-		g.Expect(errors.Is(err, content.ErrTrailingData)).To(BeTrue())
+		g.Expect(err).To(MatchError(content.ErrTrailingData))
 		g.Expect(err.Error()).To(ContainSubstring(srv.chartDigest.String()))
 	})
 }
@@ -150,12 +149,12 @@ func TestClient_Pull_DescriptorIntegrity(t *testing.T) {
 			manifestSize: 16 << 20,
 		})
 
-		client, err := container.NewClient(srv.ref, container.WithPlainHTTP(true))
+		client, err := container.NewClient(srv.ref, container.WithPlainHTTP(true), container.WithHTTPClient(testHTTPClient()))
 		g.Expect(err).ToNot(HaveOccurred())
 
 		_, err = client.Pull(t.Context(), "1.0.0")
 		g.Expect(err).To(HaveOccurred())
-		g.Expect(errors.Is(err, container.ErrManifestTooLarge)).To(BeTrue())
+		g.Expect(err).To(MatchError(container.ErrManifestTooLarge))
 	})
 
 	t.Run("should reject an invalid chart layer digest", func(t *testing.T) {
@@ -166,12 +165,12 @@ func TestClient_Pull_DescriptorIntegrity(t *testing.T) {
 			layer: layerDescriptor("sha256:not-hex", 13),
 		})
 
-		client, err := container.NewClient(srv.ref, container.WithPlainHTTP(true))
+		client, err := container.NewClient(srv.ref, container.WithPlainHTTP(true), container.WithHTTPClient(testHTTPClient()))
 		g.Expect(err).ToNot(HaveOccurred())
 
 		_, err = client.Pull(t.Context(), "1.0.0")
 		g.Expect(err).To(HaveOccurred())
-		g.Expect(errors.Is(err, container.ErrInvalidDigest)).To(BeTrue())
+		g.Expect(err).To(MatchError(container.ErrInvalidDigest))
 	})
 
 	t.Run("should reject an unsupported chart layer digest algorithm", func(t *testing.T) {
@@ -182,12 +181,12 @@ func TestClient_Pull_DescriptorIntegrity(t *testing.T) {
 			layer: layerDescriptor("md5:0123456789abcdef0123456789abcdef", 13),
 		})
 
-		client, err := container.NewClient(srv.ref, container.WithPlainHTTP(true))
+		client, err := container.NewClient(srv.ref, container.WithPlainHTTP(true), container.WithHTTPClient(testHTTPClient()))
 		g.Expect(err).ToNot(HaveOccurred())
 
 		_, err = client.Pull(t.Context(), "1.0.0")
 		g.Expect(err).To(HaveOccurred())
-		g.Expect(errors.Is(err, container.ErrInvalidDigest)).To(BeTrue())
+		g.Expect(err).To(MatchError(container.ErrInvalidDigest))
 	})
 
 	t.Run("should reject a zero-size chart layer descriptor", func(t *testing.T) {
@@ -198,12 +197,12 @@ func TestClient_Pull_DescriptorIntegrity(t *testing.T) {
 			layer: layerDescriptor("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", 0),
 		})
 
-		client, err := container.NewClient(srv.ref, container.WithPlainHTTP(true))
+		client, err := container.NewClient(srv.ref, container.WithPlainHTTP(true), container.WithHTTPClient(testHTTPClient()))
 		g.Expect(err).ToNot(HaveOccurred())
 
 		_, err = client.Pull(t.Context(), "1.0.0")
 		g.Expect(err).To(HaveOccurred())
-		g.Expect(errors.Is(err, container.ErrInvalidDescriptorSize)).To(BeTrue())
+		g.Expect(err).To(MatchError(container.ErrInvalidDescriptorSize))
 	})
 
 	t.Run("should reject a negative-size chart layer descriptor", func(t *testing.T) {
@@ -214,12 +213,12 @@ func TestClient_Pull_DescriptorIntegrity(t *testing.T) {
 			layer: layerDescriptor("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", -1),
 		})
 
-		client, err := container.NewClient(srv.ref, container.WithPlainHTTP(true))
+		client, err := container.NewClient(srv.ref, container.WithPlainHTTP(true), container.WithHTTPClient(testHTTPClient()))
 		g.Expect(err).ToNot(HaveOccurred())
 
 		_, err = client.Pull(t.Context(), "1.0.0")
 		g.Expect(err).To(HaveOccurred())
-		g.Expect(errors.Is(err, container.ErrInvalidDescriptorSize)).To(BeTrue())
+		g.Expect(err).To(MatchError(container.ErrInvalidDescriptorSize))
 	})
 
 	t.Run("should reject an oversized chart layer descriptor", func(t *testing.T) {
@@ -230,12 +229,12 @@ func TestClient_Pull_DescriptorIntegrity(t *testing.T) {
 			layer: layerDescriptor("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", 300<<20),
 		})
 
-		client, err := container.NewClient(srv.ref, container.WithPlainHTTP(true))
+		client, err := container.NewClient(srv.ref, container.WithPlainHTTP(true), container.WithHTTPClient(testHTTPClient()))
 		g.Expect(err).ToNot(HaveOccurred())
 
 		_, err = client.Pull(t.Context(), "1.0.0")
 		g.Expect(err).To(HaveOccurred())
-		g.Expect(errors.Is(err, container.ErrBlobTooLarge)).To(BeTrue())
+		g.Expect(err).To(MatchError(container.ErrBlobTooLarge))
 	})
 }
 
@@ -252,12 +251,12 @@ func TestClient_PullIndex_Integrity(t *testing.T) {
 			},
 		})
 
-		client, err := container.NewClient(srv.ref, container.WithPlainHTTP(true))
+		client, err := container.NewClient(srv.ref, container.WithPlainHTTP(true), container.WithHTTPClient(testHTTPClient()))
 		g.Expect(err).ToNot(HaveOccurred())
 
 		_, err = client.Pull(t.Context(), "1.0.0")
 		g.Expect(err).To(HaveOccurred())
-		g.Expect(errors.Is(err, container.ErrContentMismatch)).To(BeTrue())
+		g.Expect(err).To(MatchError(container.ErrContentMismatch))
 		g.Expect(err.Error()).To(ContainSubstring("unable to fetch index"))
 	})
 
@@ -271,14 +270,14 @@ func TestClient_PullIndex_Integrity(t *testing.T) {
 			},
 		})
 
-		client, err := container.NewClient(srv.ref, container.WithPlainHTTP(true))
+		client, err := container.NewClient(srv.ref, container.WithPlainHTTP(true), container.WithHTTPClient(testHTTPClient()))
 		g.Expect(err).ToNot(HaveOccurred())
 
 		data, err := client.Pull(t.Context(), "1.0.0")
 		g.Expect(err).To(HaveOccurred())
 		g.Expect(data).To(BeNil())
 		g.Expect(err.Error()).To(ContainSubstring("all index candidates failed"))
-		g.Expect(errors.Is(err, container.ErrContentMismatch)).To(BeTrue())
+		g.Expect(err).To(MatchError(container.ErrContentMismatch))
 	})
 }
 
@@ -298,13 +297,13 @@ func TestClient_PullDigest_Integrity(t *testing.T) {
 			},
 		})
 
-		client, err := container.NewClient(srv.ref, container.WithPlainHTTP(true))
+		client, err := container.NewClient(srv.ref, container.WithPlainHTTP(true), container.WithHTTPClient(testHTTPClient()))
 		g.Expect(err).ToNot(HaveOccurred())
 
 		data, err := client.PullDigest(t.Context(), srv.manifestDigest)
 		g.Expect(err).To(HaveOccurred())
 		g.Expect(data).To(BeNil())
-		g.Expect(errors.Is(err, container.ErrContentMismatch)).To(BeTrue())
+		g.Expect(err).To(MatchError(container.ErrContentMismatch))
 		g.Expect(err.Error()).To(ContainSubstring(srv.manifestDigest.String()))
 	})
 
@@ -320,7 +319,7 @@ func TestClient_PullDigest_Integrity(t *testing.T) {
 
 		srv := newResolvedAsRegistry(t, other)
 
-		client, err := container.NewClient(srv.ref, container.WithPlainHTTP(true))
+		client, err := container.NewClient(srv.ref, container.WithPlainHTTP(true), container.WithHTTPClient(testHTTPClient()))
 		g.Expect(err).ToNot(HaveOccurred())
 
 		data, err := client.PullDigest(t.Context(), srv.manifestDigest)

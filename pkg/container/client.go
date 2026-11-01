@@ -44,7 +44,13 @@ func NewClient(ref string, opts ...ClientOption) (*Client, error) {
 	}
 
 	repo.PlainHTTP = options.PlainHTTP
-	repo.Client = &auth.Client{Credential: computeCredentials(named, &options)}
+
+	client := &auth.Client{Credential: computeCredentials(named, &options)}
+	if options.httpClient != nil {
+		client.Client = options.httpClient
+	}
+
+	repo.Client = client
 
 	return &Client{ref: repoRef, originalRef: ref, repo: repo}, nil
 }

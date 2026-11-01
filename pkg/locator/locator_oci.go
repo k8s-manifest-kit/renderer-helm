@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 
 	"github.com/k8s-manifest-kit/renderer-helm/pkg/container"
 )
@@ -26,6 +27,14 @@ type OCI struct {
 	Credentials *Credentials
 	CacheDir    string
 	PlainHTTP   bool
+
+	// HTTPClient is the underlying HTTP client used for registry
+	// communication. When nil, the ORAS default is used, which shares
+	// http.DefaultTransport. Tests that close httptest servers while other
+	// requests are still in flight must set this to a client with a private
+	// transport, because httptest.Server.Close closes idle connections on
+	// http.DefaultTransport process-wide.
+	HTTPClient *http.Client
 }
 
 // Locate pulls the chart from an OCI registry and returns the local cache path.
@@ -55,6 +64,10 @@ func (o *OCI) pull(ctx context.Context) ([]byte, error) {
 
 	if o.PlainHTTP {
 		opts = append(opts, container.WithPlainHTTP(true))
+	}
+
+	if o.HTTPClient != nil {
+		opts = append(opts, container.WithHTTPClient(o.HTTPClient))
 	}
 
 	client, err := container.NewClient(o.Ref, opts...)

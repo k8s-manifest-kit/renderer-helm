@@ -57,6 +57,8 @@ func TestOCILocator_RefParsing(t *testing.T) {
 				Version:   tt.version,
 				CacheDir:  t.TempDir(),
 				PlainHTTP: true,
+
+				HTTPClient: testHTTPClient(),
 			}
 
 			_, err := oci.Locate(t.Context())
@@ -89,6 +91,8 @@ func TestOCILocator_DigestPin(t *testing.T) {
 			Ref:       fmt.Sprintf("oci://%s@%s", srv.ref, srv.manifestDigest),
 			CacheDir:  t.TempDir(),
 			PlainHTTP: true,
+
+			HTTPClient: testHTTPClient(),
 		}
 
 		result, err := oci.Locate(t.Context())
@@ -128,6 +132,8 @@ func TestOCILocator_DigestPullEmptyBlob(t *testing.T) {
 		Ref:       fmt.Sprintf("oci://%s@%s", srv.ref, srv.manifestDigest),
 		CacheDir:  t.TempDir(),
 		PlainHTTP: true,
+
+		HTTPClient: testHTTPClient(),
 	}
 
 	_, err := oci.Locate(t.Context())
@@ -154,6 +160,8 @@ func TestOCILocator_IntegrityFailure(t *testing.T) {
 		Ref:       fmt.Sprintf("oci://%s@%s", srv.ref, srv.manifestDigest),
 		CacheDir:  cacheDir,
 		PlainHTTP: true,
+
+		HTTPClient: testHTTPClient(),
 	}
 
 	_, err := oci.Locate(t.Context())
@@ -176,6 +184,8 @@ func TestOCILocator_NonSemverTags(t *testing.T) {
 		Ref:       "oci://" + srv.ref,
 		CacheDir:  t.TempDir(),
 		PlainHTTP: true,
+
+		HTTPClient: testHTTPClient(),
 	}
 
 	_, err := oci.Locate(t.Context())
