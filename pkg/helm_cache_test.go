@@ -1,3 +1,8 @@
+// Renderer-level cache behavior: per-source output isolation, cache-hit
+// render origins, clone safety, and FastCacheKeyFunc end-to-end through
+// helm.New and Process. Unit tests of the cache constructor, ChartSpec,
+// and FastCacheKeyFunc live in pkg/cache.
+
 package helm_test
 
 import (
