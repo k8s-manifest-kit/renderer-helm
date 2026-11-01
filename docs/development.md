@@ -95,6 +95,26 @@ Tests live in external test packages (`helm_test`, `container_test`,
 files cohesive and introduce abstractions only when they capture a real
 responsibility, not to erase similar-looking code.
 
+### Test simplicity
+
+Use the simplest test that proves the contract under test. Don't re-test
+standard-library internals, and don't add helpers, mocks, instrumentation,
+subprocesses, or extra test files unless a concrete behavior or regression
+requires them. Keep small suites cohesive in one test file; the
+[concern-suffixed layout](#test-layout) below describes where a justified
+split goes, not a requirement to create those files.
+
+Keep test machinery proportional to the behavior and risk under test. A
+local registry, `httptrace` recorder, or hostile-byte fake server is
+justified when it observes a real transport or integrity contract — the
+regressions listed under [Regression anchors](#regression-anchors) exist
+for that reason — but each instrument needs that concrete purpose, not
+speculative coverage. Start with a small checked-in chart or `fstest.MapFS`
+fixture, reuse existing fixtures before building new machinery, and don't
+invent edge-case matrices. The offline boundaries, integration tags,
+chart-version pinning, cache-origin evidence, and concurrency duties in
+this guide are unchanged by this rule.
+
 ### Test layout
 
 - Colocate tests with implementation. A `test/` subdirectory is a separate

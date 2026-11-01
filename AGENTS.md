@@ -44,5 +44,8 @@ repositories are guarded by the `integration` build tag and run through
 `make check`). Pin exact chart versions in integration tests so they stay
 reproducible, except tests that deliberately exercise version discovery
 or semver constraints. Use unique valid release names, Gomega assertions,
-and `t.Context()`. See [Development](docs/development.md) for code, test,
-concurrency, and cache-evidence conventions.
+and `t.Context()`. Keep test machinery proportional to the behavior under
+test: use the simplest fixture that proves it, and add harnesses or
+instrumentation only when a concrete regression requires them. See
+[Development](docs/development.md) for code, test, concurrency, and
+cache-evidence conventions.
