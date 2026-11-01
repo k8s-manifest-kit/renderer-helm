@@ -115,14 +115,14 @@ func TestRepoLocator_Credentials(t *testing.T) {
 		t.Parallel()
 		g := NewWithT(t)
 
-		var receivedAuth string
+		receivedAuth := make(chan string, 1)
 
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			switch r.URL.Path {
 			case indexPath:
 				_, _ = w.Write([]byte(repoIndexYAML))
 			case "/mychart-1.0.0.tgz":
-				receivedAuth = r.Header.Get("Authorization")
+				receivedAuth <- r.Header.Get("Authorization")
 				_, _ = w.Write([]byte(chartData))
 			default:
 				http.NotFound(w, r)
@@ -140,15 +140,16 @@ func TestRepoLocator_Credentials(t *testing.T) {
 			},
 		})
 		g.Expect(err).ToNot(HaveOccurred())
-		g.Expect(receivedAuth).ToNot(BeEmpty(), "credentials should be forwarded for same-origin")
+		g.Expect(<-receivedAuth).ToNot(BeEmpty(), "credentials should be forwarded for same-origin")
 	})
 
 	t.Run("should not forward credentials for cross-origin chart URL", func(t *testing.T) {
 		t.Parallel()
 		g := NewWithT(t)
 
+		receivedAuth := make(chan string, 1)
 		chartSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			g.Expect(r.Header.Get("Authorization")).To(BeEmpty(), "credentials should not leak cross-origin")
+			receivedAuth <- r.Header.Get("Authorization")
 			_, _ = w.Write([]byte(chartData))
 		}))
 		t.Cleanup(chartSrv.Close)
@@ -168,6 +169,7 @@ func TestRepoLocator_Credentials(t *testing.T) {
 			},
 		})
 		g.Expect(err).ToNot(HaveOccurred())
+		g.Expect(<-receivedAuth).To(BeEmpty(), "credentials should not leak cross-origin")
 	})
 }
 

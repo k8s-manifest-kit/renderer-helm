@@ -99,6 +99,36 @@ The old root symbol is gone; renderers that passed `helm.FastCacheKeyFunc` to
 `WithCache` must import the local cache package and pass
 `cache.FastCacheKeyFunc` instead.
 
+## HTTP client ownership
+
+OCI registry operations create a fresh client from
+`github.com/k8s-manifest-kit/pkg/util/httpclient` when no client is injected.
+Its private transport disables keep-alives and does not retain idle
+connections. The default client keeps a zero overall timeout and uses the
+environment proxy, matching the previous ORAS defaults without using
+`http.DefaultClient` or `http.DefaultTransport`.
+
+Classic Helm repository downloads also use a fresh shared-factory client, then
+apply their path-specific settings: a 60-second client timeout, 10-second dial
+and TLS handshake timeouts, a 30-second response-header timeout, and direct
+connections without an environment proxy. HTTP/2 remains disabled on this
+path. Keep-alives are disabled as the intentional change; credentials,
+same-origin restrictions, redirects, response bounds, and error behavior are
+unchanged.
+
+`container.WithHTTPClient`, `locator.OCI.HTTPClient`, and
+`locator.Repo.HTTPClient` accept caller-owned clients. A supplied client is
+passed through without first-party mutation or lifecycle management. In
+particular, an injected client with a nil `Transport` retains the Go standard
+library fallback; callers are responsible for its transport and lifecycle.
+
+The production default prevents concurrent local test-server cleanup from
+interfering with unrelated OCI requests through a shared default transport.
+The failure mechanism was reproduced locally as
+`http: CloseIdleConnections called`; historical CI logs showed only failed
+boolean integrity assertions, not the underlying error, so that exact CI error
+was not observed.
+
 See [`../AGENTS.md`](../AGENTS.md) and [`development.md`](development.md).
 
 ## OCI content integrity

@@ -11,6 +11,8 @@ import (
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"oras.land/oras-go/v2/registry/remote"
 	"oras.land/oras-go/v2/registry/remote/auth"
+
+	"github.com/k8s-manifest-kit/pkg/util/httpclient"
 )
 
 // Client wraps an ORAS remote.Repository for Helm chart OCI operations.
@@ -45,9 +47,14 @@ func NewClient(ref string, opts ...ClientOption) (*Client, error) {
 
 	repo.PlainHTTP = options.PlainHTTP
 
-	client := &auth.Client{Credential: computeCredentials(named, &options)}
-	if options.httpClient != nil {
-		client.Client = options.httpClient
+	httpClient := options.httpClient
+	if httpClient == nil {
+		httpClient = httpclient.NewClient()
+	}
+
+	client := &auth.Client{
+		Client:     httpClient,
+		Credential: computeCredentials(named, &options),
 	}
 
 	repo.Client = client

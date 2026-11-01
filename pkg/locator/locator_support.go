@@ -18,6 +18,8 @@ import (
 
 	chart "helm.sh/helm/v4/pkg/chart/v2"
 	"sigs.k8s.io/yaml"
+
+	"github.com/k8s-manifest-kit/pkg/util/httpclient"
 )
 
 const (
@@ -45,13 +47,19 @@ var (
 )
 
 func newHTTPClient() *http.Client {
+	transport := httpclient.NewTransport()
+	transport.Proxy = nil
+	transport.DialContext = (&net.Dialer{Timeout: dialTimeout}).DialContext
+	transport.ForceAttemptHTTP2 = false
+	transport.MaxIdleConns = 0
+	transport.IdleConnTimeout = 0
+	transport.TLSHandshakeTimeout = tlsHandshakeTimeout
+	transport.ResponseHeaderTimeout = responseTimeout
+	transport.ExpectContinueTimeout = 0
+
 	return &http.Client{
-		Timeout: httpTimeout,
-		Transport: &http.Transport{
-			DialContext:           (&net.Dialer{Timeout: dialTimeout}).DialContext,
-			TLSHandshakeTimeout:   tlsHandshakeTimeout,
-			ResponseHeaderTimeout: responseTimeout,
-		},
+		Timeout:   httpTimeout,
+		Transport: transport,
 	}
 }
 

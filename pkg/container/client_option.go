@@ -50,12 +50,10 @@ func WithPlainHTTP(plain bool) ClientOption {
 	})
 }
 
-// WithHTTPClient sets the underlying HTTP client used for registry
-// communication. When nil, the ORAS default is used, which shares
-// http.DefaultTransport. Supplying a client with a private transport is
-// required when concurrent httptest servers are closed while requests are
-// still in flight, because httptest.Server.Close closes idle connections on
-// http.DefaultTransport process-wide.
+// WithHTTPClient sets the caller-owned HTTP client used for registry
+// communication. When nil, the registry client creates a fresh private client
+// with keep-alives disabled. A non-nil client is passed through without
+// mutation; its transport and lifecycle remain the caller's responsibility.
 func WithHTTPClient(client *http.Client) ClientOption {
 	return option.FunctionalOption[ClientOptions](func(opts *ClientOptions) {
 		opts.httpClient = client

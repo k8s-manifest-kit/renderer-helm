@@ -16,16 +16,6 @@ import (
 // Mock OCI registry helpers
 // ---------------------------------------------------------------------------
 
-// testHTTPClient returns an HTTP client whose transport is private to the
-// caller. Parallel subtests each close their own httptest server, and
-// httptest.Server.Close closes idle connections on http.DefaultTransport
-// process-wide, which breaks requests that other subtests are still making
-// over pooled connections. A private transport clone is unreachable from
-// that cleanup.
-func testHTTPClient() *http.Client {
-	return &http.Client{Transport: http.DefaultTransport.(*http.Transport).Clone()}
-}
-
 type mockOCIServer struct {
 	*httptest.Server
 

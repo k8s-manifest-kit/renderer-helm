@@ -40,6 +40,31 @@ latest tag of an OCI repository, or pulling through a constraint such as
 behavior under test. The tagged files are linted by
 `make lint/integration`, which is part of `make check`.
 
+## HTTP client ownership and regression evidence
+
+Library-created OCI and repository HTTP clients use the shared
+`pkg/util/httpclient` constructors and own fresh, non-pooled transports. OCI
+defaults retain environment-proxy behavior and no overall timeout. Repository
+downloads retain their direct-connection and path-specific timeout settings.
+Injected clients remain caller-owned and are passed through without
+first-party mutation or closure; a nil transport on an injected client remains
+the caller's choice and is outside the default-construction guarantee.
+
+The OCI concurrency regression tests exercise `container.NewClient` and
+`locator.OCI` without HTTP-client injection. `TestClient_DefaultHTTPClientDoesNotReuseConnections`
+uses a local registry and `httptrace` to prove successful registry requests do
+not reuse a connection. On the historical test-only workaround, it observed
+`[false true true]`; after the production default changed, every observed
+connection was new. This deterministic test proves the construction contract,
+not the timing-sensitive historical race. `httptest.Server.Close` calls
+`http.DefaultTransport.CloseIdleConnections`; the corresponding transport
+failure was captured in local CPU-contention reproduction, but historical CI
+logged only sentinel-assertion failures, not the actual error.
+
+Injection tests cover caller client/transport ownership, redirects, response
+body closure, request cancellation, and same-origin credential forwarding.
+Assertions and handler observations are collected on the test goroutine.
+
 ## Package layout
 
 - `pkg/helm.go` — source model and renderer orchestration.

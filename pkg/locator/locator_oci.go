@@ -28,12 +28,10 @@ type OCI struct {
 	CacheDir    string
 	PlainHTTP   bool
 
-	// HTTPClient is the underlying HTTP client used for registry
-	// communication. When nil, the ORAS default is used, which shares
-	// http.DefaultTransport. Tests that close httptest servers while other
-	// requests are still in flight must set this to a client with a private
-	// transport, because httptest.Server.Close closes idle connections on
-	// http.DefaultTransport process-wide.
+	// HTTPClient is the caller-owned HTTP client used for registry
+	// communication. When nil, a fresh private client with keep-alives disabled
+	// is created. A non-nil client is passed through without mutation; its
+	// transport and lifecycle remain the caller's responsibility.
 	HTTPClient *http.Client
 }
 
