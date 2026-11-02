@@ -234,9 +234,10 @@ func TestValuesCallbackRejectsCyclicSourceValues(t *testing.T) {
 		})
 		g.Expect(err).ToNot(HaveOccurred())
 
-		// The render-time overlay would replace the cyclic branch entirely;
-		// the source tree is still rejected whole before the merge runs.
-		objects, err := renderer.Process(t.Context(), types.Values{"extra": map[string]any{"safe": true}})
+		// The render-time overlay replaces the cyclic branch with a scalar,
+		// so a merge-time check would never see the cycle; the source tree
+		// is still rejected whole before the merge runs.
+		objects, err := renderer.Process(t.Context(), types.Values{"extra": "safe-string"})
 
 		g.Expect(err).To(HaveOccurred())
 		g.Expect(errors.Is(err, utilmaps.ErrCycle)).To(BeTrue())
