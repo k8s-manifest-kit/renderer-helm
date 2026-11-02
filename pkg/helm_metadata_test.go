@@ -1,11 +1,14 @@
 package helm_test
 
 import (
+	"slices"
 	"testing"
 	"testing/fstest"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
+	engine "github.com/k8s-manifest-kit/engine/pkg"
+	"github.com/k8s-manifest-kit/engine/pkg/render"
 	"github.com/k8s-manifest-kit/engine/pkg/types"
 	"github.com/k8s-manifest-kit/pkg/util/k8s"
 	helm "github.com/k8s-manifest-kit/renderer-helm/pkg"
@@ -450,4 +453,133 @@ func TestContentHash(t *testing.T) {
 			g.Expect(hash1).Should(Equal(hash2))
 		}
 	})
+}
+
+// deepCopyObjects returns a deep copy of every object in a rendered batch,
+// freezing a baseline for later mutation checks.
+func deepCopyObjects(objects []unstructured.Unstructured) []unstructured.Unstructured {
+	copies := make([]unstructured.Unstructured, 0, len(objects))
+	for i := range objects {
+		copies = append(copies, *objects[i].DeepCopy())
+	}
+
+	return copies
+}
+
+// chartFSBytes snapshots the bytes of every file of an in-memory chart so a
+// later read can prove rendering left the fixture untouched.
+func chartFSBytes(chartFS fstest.MapFS) map[string][]byte {
+	snapshot := make(map[string][]byte, len(chartFS))
+	for name, file := range chartFS {
+		snapshot[name] = slices.Clone(file.Data)
+	}
+
+	return snapshot
+}
+
+// TestEngineHashPreservation proves that two real Helm renderers produce the
+// same object hashes, provenance annotations, and output order when run
+// directly and when composed in one engine, on repeated uncached renders.
+func TestEngineHashPreservation(t *testing.T) {
+	g := NewWithT(t)
+
+	// Fixed render-time values shared by the direct baselines and both
+	// engine renders, so the effective values are identical on every path.
+	effectiveValues := types.Values{"replicaCount": 2}
+
+	// Two independent renderers over separate chart filesystems with
+	// distinct release names: the rendered ConfigMap names and hashes stay
+	// distinguishable even though both renderers share the "helm" name.
+	firstFS := annotatedChartFS()
+	secondFS := annotatedChartFS()
+	firstBytes := chartFSBytes(firstFS)
+	secondBytes := chartFSBytes(secondFS)
+
+	first, err := helm.New([]helm.Source{
+		{
+			FS:          firstFS,
+			Chart:       "chart",
+			ReleaseName: "engine-hash-alpha",
+		},
+	}, helm.WithSourceAnnotations(true))
+	g.Expect(err).ToNot(HaveOccurred(), "first renderer construction")
+
+	second, err := helm.New([]helm.Source{
+		{
+			FS:          secondFS,
+			Chart:       "chart",
+			ReleaseName: "engine-hash-beta",
+		},
+	}, helm.WithSourceAnnotations(true))
+	g.Expect(err).ToNot(HaveOccurred(), "second renderer construction")
+
+	// Direct baselines with the same effective values later supplied to the
+	// engine; snapshots freeze them for the later mutation checks.
+	firstBaseline, err := first.Process(t.Context(), effectiveValues)
+	g.Expect(err).ToNot(HaveOccurred(), "direct process of the first renderer")
+	secondBaseline, err := second.Process(t.Context(), effectiveValues)
+	g.Expect(err).ToNot(HaveOccurred(), "direct process of the second renderer")
+
+	firstSnapshot := deepCopyObjects(firstBaseline)
+	secondSnapshot := deepCopyObjects(secondBaseline)
+
+	baselines := []struct {
+		name    string
+		objects []unstructured.Unstructured
+	}{
+		{name: "first", objects: firstBaseline},
+		{name: "second", objects: secondBaseline},
+	}
+	for _, baseline := range baselines {
+		g.Expect(baseline.objects).To(HaveLen(1), "%s direct baseline length", baseline.name)
+		g.Expect(baseline.objects[0].GetKind()).To(Equal("ConfigMap"), "%s direct baseline kind", baseline.name)
+		g.Expect(baseline.objects[0].GetAnnotations()[types.AnnotationContentHash]).
+			NotTo(BeEmpty(), "%s direct baseline content hash", baseline.name)
+	}
+
+	g.Expect(firstBaseline[0].GetName()).To(Equal("engine-hash-alpha-annotated"))
+	g.Expect(secondBaseline[0].GetName()).To(Equal("engine-hash-beta-annotated"))
+	g.Expect(firstBaseline[0].GetName()).NotTo(Equal(secondBaseline[0].GetName()))
+	g.Expect(firstBaseline[0].GetAnnotations()[types.AnnotationContentHash]).
+		NotTo(Equal(secondBaseline[0].GetAnnotations()[types.AnnotationContentHash]))
+
+	// The ordered engine oracle is the concatenated direct baselines; full
+	// object equality covers the content hash, source annotations, render
+	// origin, and data.
+	expected := slices.Concat(firstSnapshot, secondSnapshot)
+
+	e, err := engine.New(engine.WithRenderer(first), engine.WithRenderer(second))
+	g.Expect(err).ToNot(HaveOccurred(), "engine construction")
+
+	firstRender, err := e.Render(t.Context(), render.WithValues(effectiveValues))
+	g.Expect(err).ToNot(HaveOccurred(), "first engine render")
+	secondRender, err := e.Render(t.Context(), render.WithValues(effectiveValues))
+	g.Expect(err).ToNot(HaveOccurred(), "second engine render")
+
+	renders := []struct {
+		phase  string
+		actual []unstructured.Unstructured
+	}{
+		{phase: "first engine render", actual: firstRender},
+		{phase: "second engine render", actual: secondRender},
+	}
+	for _, engineRender := range renders {
+		g.Expect(engineRender.actual).To(
+			HaveLen(len(expected)),
+			"%s: ordered result length", engineRender.phase,
+		)
+		for i := range expected {
+			g.Expect(engineRender.actual[i]).To(
+				Equal(expected[i]),
+				"%s: object %d must equal its direct baseline", engineRender.phase, i,
+			)
+		}
+	}
+
+	// The later engine renders must not mutate the retained baselines or
+	// the chart filesystems they were rendered from.
+	g.Expect(firstBaseline).To(Equal(firstSnapshot), "first direct baseline unchanged by engine renders")
+	g.Expect(secondBaseline).To(Equal(secondSnapshot), "second direct baseline unchanged by engine renders")
+	g.Expect(chartFSBytes(firstFS)).To(Equal(firstBytes), "first chart filesystem unchanged")
+	g.Expect(chartFSBytes(secondFS)).To(Equal(secondBytes), "second chart filesystem unchanged")
 }
