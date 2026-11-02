@@ -10,6 +10,30 @@ import (
 type RendererOption = option.Option[RendererOptions]
 
 // RendererOptions is a struct-based option that can set multiple renderer options at once.
+//
+// Options apply left to right: each option sees the state left by the ones
+// before it. When RendererOptions is applied through ApplyTo, fields divide
+// into replacing and preserving groups:
+//
+//   - Filters, Transformers, PostRenderers, and SourceSelectors replace the
+//     target's slices, including when nil — a struct clears hooks and
+//     selectors that earlier options added.
+//   - SourceAnnotations, ContentHash, LintMode, and Strict replace the
+//     target's booleans, including when false.
+//   - Empty RepositoryConfig, RepositoryCache, and ContentCache preserve the
+//     target's paths; only non-empty paths overwrite them.
+//   - A nil CacheOptions preserves the target's cache configuration; a
+//     non-nil CacheOptions applies its own field rules to the target's cache
+//     options, creating them if needed.
+//
+// Functional options change only their own field or append to a single
+// slice, so they compose with anything applied before or after. Note the
+// difference from a fresh constructor: New starts from defaults with content
+// hashing enabled, the Helm user paths for the caches, and caching disabled
+// (nil cache options), while applying a RendererOptions struct replaces the
+// hook, selector, and boolean fields outright — a caller who wants content
+// hashing after a struct must set ContentHash: true in the struct (or follow
+// it with WithContentHash(true)).
 type RendererOptions struct {
 	// Filters are renderer-specific filters applied during Process().
 	Filters []types.Filter
@@ -23,23 +47,35 @@ type RendererOptions struct {
 	// SourceSelectors are renderer-specific source selectors evaluated before rendering each source.
 	SourceSelectors []SourceSelector
 
-	// RepositoryConfig is the path to the repositories file.
+	// RepositoryConfig is the path to the repositories file. Applying a
+	// RendererOptions struct preserves the previous path when this field is
+	// empty and overwrites it only when non-empty.
 	RepositoryConfig string
 
 	// RepositoryCache is the path to the repository cache directory.
+	// Applying a RendererOptions struct preserves the previous path when
+	// this field is empty and overwrites it only when non-empty.
 	RepositoryCache string
 
 	// ContentCache is the path to the content-addressable cache directory.
+	// Applying a RendererOptions struct preserves the previous path when
+	// this field is empty and overwrites it only when non-empty.
 	ContentCache string
 
 	// CacheOptions holds cache configuration. nil = caching disabled.
+	// Applying a RendererOptions struct with a nil CacheOptions preserves
+	// the previously configured cache (including disabled); a non-nil value
+	// applies its field rules on top of the previous configuration.
 	CacheOptions *cache.Options
 
 	// SourceAnnotations enables automatic addition of source tracking annotations.
+	// Applying a RendererOptions struct replaces this field, including with false.
 	SourceAnnotations bool
 
 	// ContentHash enables automatic addition of a SHA-256 content hash annotation.
-	// Default: true (enabled).
+	// Default: true (enabled) in a fresh constructor; applying a
+	// RendererOptions struct replaces this field, including with false, so a
+	// struct that wants hashing must set it to true explicitly.
 	ContentHash bool
 
 	// LintMode allows some 'required' template values to be missing without failing.
@@ -52,6 +88,12 @@ type RendererOptions struct {
 }
 
 // ApplyTo applies the renderer options to the target configuration.
+//
+// Application follows the composition rules documented on RendererOptions:
+// hooks, selectors, and booleans replace their target fields (including
+// nil and false), empty repository and cache paths preserve the target's
+// paths, and a nil CacheOptions preserves the target's cache configuration
+// while a non-nil one applies its field rules on top.
 func (opts RendererOptions) ApplyTo(target *RendererOptions) {
 	target.Filters = opts.Filters
 	target.Transformers = opts.Transformers

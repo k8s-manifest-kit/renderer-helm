@@ -83,6 +83,60 @@ Source annotations are disabled by default. When enabled, the shared source
 annotation keys describe the source type and chart location. Content hashes
 use `manifests.k8s-manifests-kit/content.hash` and are enabled by default.
 
+### Option composition
+
+Renderer options apply left to right. Functional options touch a single
+field — `WithFilter`, `WithTransformer`, `WithPostRenderer`, and
+`WithSourceSelector` append, and the boolean and path setters overwrite only
+their own field — so they compose with anything around them. A
+`RendererOptions` struct is stronger: it replaces the hook, selector, and
+boolean fields outright (including with nil and false), while empty
+repository and cache paths and a nil `CacheOptions` preserve what earlier
+options configured.
+
+A hook before a struct survives only if the struct carries it; a hook after
+a struct is kept:
+
+```go
+// The struct clears the filter added before it and disables hashing:
+// its zero-valued Filters and ContentHash replace the previous state.
+renderer, _ := helm.New(sources,
+    helm.WithFilter(keepPods),
+    helm.RendererOptions{SourceAnnotations: true},
+    helm.WithContentHash(true), // re-enables what the struct turned off
+)
+
+// Hook after struct: the post-renderer is appended to the struct's state.
+renderer, _ := helm.New(sources,
+    helm.RendererOptions{SourceAnnotations: true, ContentHash: true},
+    helm.WithPostRenderer(label),
+)
+```
+
+A struct that wants hashing must set `ContentHash: true` explicitly; a
+`WithContentHash(true)` after the struct achieves the same. These rules
+govern the renderer's own options only — the engine's additive options
+(`engine.WithFilter` and friends) follow the engine's rules, not these.
+
+### Hash stages
+
+Both object paths a source produces — CRDs decoded from the chart and
+templates decoded from the rendered output — pass through the same stage
+order: source annotations are applied first (when enabled), then the content
+hash, then the result is stored in the source's output cache (when enabled)
+and stamped with its render origin, and only afterwards do the source,
+renderer, and engine hooks run.
+
+Consequences callers can rely on: the hash covers the complete object at
+hashing time, including any metadata already present — previously applied
+source annotations participate, as does any pre-existing annotation. It is
+not a hash of the chart's source bytes, and it is not idempotent. The
+render-origin stamp and cache retrieval never rehash, and mutations made by
+later hooks need not match the stored digest. The full annotation phase
+contract, including phase ordering and option reuse, is the engine's
+[annotation contract](../../engine/docs/design.md#annotations); this
+renderer follows it at the points described above.
+
 ## Caching and repositories
 
 Repository configuration and repository cache paths are separate from the
