@@ -7,14 +7,14 @@ require (
 	github.com/distribution/reference v0.6.0
 	github.com/k8s-manifest-kit/engine v0.2.1-0.20261101182842-ce323740b8ae
 	github.com/k8s-manifest-kit/pkg v0.2.1-0.20261101181638-505646e06d80
-	github.com/lburgazzoli/gomega-matchers v0.6.1-0.20261030191553-1e92fbfadfd1
+	github.com/lburgazzoli/gomega-matchers v0.7.0
 	github.com/onsi/gomega v1.44.0
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/rs/xid v1.6.0
 	helm.sh/helm/v4 v4.3.1
-	k8s.io/api v0.37.1
-	k8s.io/apimachinery v0.37.1
+	k8s.io/api v0.37.2
+	k8s.io/apimachinery v0.37.2
 	oras.land/oras-go/v2 v2.7.0
 	sigs.k8s.io/yaml v1.6.0
 )
@@ -48,7 +48,7 @@ require (
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/huandu/xstrings v1.5.0 // indirect
-	github.com/itchyny/gojq v0.12.19 // indirect
+	github.com/itchyny/gojq v0.12.20 // indirect
 	github.com/itchyny/timefmt-go v0.1.9 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/mitchellh/copystructure v1.2.0 // indirect
